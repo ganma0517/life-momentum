@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>人生力矩</title>
 <style>
   @font-face { font-display: swap; }
@@ -58,6 +59,54 @@
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; }
 
   ::selection { background: var(--brass-soft); color: var(--ink); }
+
+  /* 直立式「遊戲畫面」呈現：手機版滿版鋪滿螢幕（用 dvh 避免網址列造成的高度誤差），
+     桌機／平板版則置中收在一個直立長方形的「遊戲畫框」內，模擬手機遊戲的直式比例。
+     畫面內容在畫框內部自行捲動，畫框本身高度固定，不會被內容撐高。 */
+  html, body { height: 100%; }
+  .game-backdrop {
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
+    background: var(--bg);
+  }
+  .game-frame {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0 auto;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .game-frame-scroll {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  .game-frame-scroll .min-h-screen { min-height: 100%; }
+
+  @media (min-width: 700px) {
+    .game-backdrop {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #06070b;
+      padding: 36px 16px;
+    }
+    .game-frame {
+      max-width: 460px;
+      width: 100%;
+      height: calc(100vh - 72px);
+      height: calc(100dvh - 72px);
+      min-height: 0;
+      border-radius: 30px;
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 50px 110px -25px rgba(0, 0, 0, 0.7), 0 0 0 7px #14161c;
+    }
+  }
 
   :focus-visible {
     outline: 2px solid var(--brass);
@@ -2107,13 +2156,16 @@ function writeDisclaimerAck() {
 }
 
 /* 電腦／手機通用版：不提供手動切換，完全依螢幕寬度用 CSS 響應式呈現。
-   超寬螢幕（桌機）時把內容收在 max-w-5xl 置中，避免文字被拉得過寬；
-   窄螢幕（手機）時自然佔滿寬度，搭配前面針對 <640px / <480px 的字級放大媒體查詢。 */
+   統一採用「直立式遊戲畫框」：手機版滿版鋪滿螢幕（用 100dvh，避免網址列造成高度誤差）；
+   桌機／平板版則把畫面收在置中的直式長方形畫框內，模擬手機遊戲的直式比例與邊框質感。
+   畫框內部可獨立捲動，搭配前面針對 <640px / <480px 的字級放大媒體查詢一起使用。 */
 function ResponsiveShell({ children }) {
   return (
-    <div className="min-h-screen w-full" style={{ background: 'var(--bg)' }}>
-      <div className="w-full max-w-5xl mx-auto min-h-screen">
-        {children}
+    <div className="game-backdrop">
+      <div className="game-frame">
+        <div className="game-frame-scroll">
+          {children}
+        </div>
       </div>
     </div>
   );
