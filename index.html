@@ -484,6 +484,11 @@ const DEFAULT_SETTINGS = {
      即使背景不同）。這個滑桿不會直接改動任何人的「成功分數」，改動的是「這一輪模擬
      裡，各種背景的人到底看得到哪些選項」。 */
   opportunityEquality: 60,
+  /* 社會安全網 Social Safety Net：0 = 幾乎沒有社會安全網（風雨全部由個人與家庭承擔，
+     壞事發生時分數重摔），100 = 完整的社會安全網（失業、生病、育兒、住房、長照等衝擊
+     發生時，個人承受的負面衝擊會被大幅緩衝）。每一個滑桿只緩衝「特定類型」的負面衝擊，
+     不影響正面效果，也不影響其他類型的風險。 */
+  unemploymentSupport: 40, healthcareSupport: 40, educationSupport: 40, childcareSupport: 40, housingSupport: 40, eldercareSupport: 40,
   enableFamilyCrisis: true, enablePoliticalCapital: true, enableMultipleTestingLesson: true, enablePValueLesson: true, enableTimeRelevantEvents: true,
 };
 const SETTINGS_BOUNDS = {
@@ -496,6 +501,12 @@ const SETTINGS_BOUNDS = {
   luckCoefficient: { min: 0, max: 1, step: 0.01 },
   randomNoise: { min: 0, max: 0.5, step: 0.01 },
   opportunityEquality: { min: 0, max: 100, step: 5 },
+  unemploymentSupport: { min: 0, max: 100, step: 5 },
+  healthcareSupport: { min: 0, max: 100, step: 5 },
+  educationSupport: { min: 0, max: 100, step: 5 },
+  childcareSupport: { min: 0, max: 100, step: 5 },
+  housingSupport: { min: 0, max: 100, step: 5 },
+  eldercareSupport: { min: 0, max: 100, step: 5 },
 };
 function clampSettings(settings) {
   const out = { ...settings };
@@ -508,13 +519,13 @@ function clampSettings(settings) {
   return out;
 }
 const PRESETS = {
-  meritocracy: { label: 'Meritocracy 功績社會', description: '努力效果非常強，家庭背景的影響相對較小；多數人也都看得到相似的人生選單。', settings: { effortCoefficient: 0.55, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.06, socialCapitalCoefficient: 0.06, luckCoefficient: 0.1, randomNoise: 0.15, opportunityEquality: 85 } },
-  unequalOpportunity: { label: 'Unequal Opportunity 機會不均', description: '努力有效，但家庭資源明顯改變成功機率，也明顯改變一個人「看得到哪些選項」。', settings: { effortCoefficient: 0.28, familySESCoefficient: 0.32, culturalCapitalCoefficient: 0.12, socialCapitalCoefficient: 0.12, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 25 } },
-  highMobility: { label: 'High Mobility 高流動性', description: '家庭背景有影響，但教育可以明顯降低差距，多數人生選項也仍然對大部分人開放。', settings: { effortCoefficient: 0.32, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.08, luckCoefficient: 0.1, randomNoise: 0.14, opportunityEquality: 70 } },
-  structuralAdvantage: { label: 'Structural Advantage 結構優勢累積', description: '家庭、文化、社會資本具有較強累積效果，資源不足的人有更多選項從一開始就不會出現。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.3, culturalCapitalCoefficient: 0.18, socialCapitalCoefficient: 0.16, luckCoefficient: 0.06, randomNoise: 0.1, opportunityEquality: 20 } },
-  lottery: { label: 'Lottery Society 純機運社會', description: '個人選擇的影響很小，多數結果由運氣與隨機波動決定；選單本身相對開放，但結果仍難預測。', settings: { effortCoefficient: 0.08, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.05, socialCapitalCoefficient: 0.05, luckCoefficient: 0.42, randomNoise: 0.3, opportunityEquality: 65 } },
-  culturalCapitalSociety: { label: 'Cultural Capital Society 文化資本主導', description: '家庭的閱讀環境、教育期望等文化資本，比金錢更能預測結果，也更容易決定誰看得到哪些機會。', settings: { effortCoefficient: 0.22, familySESCoefficient: 0.12, culturalCapitalCoefficient: 0.32, socialCapitalCoefficient: 0.1, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 35 } },
-  networkSociety: { label: 'Network Society 人脈社會', description: '「認識誰」比「會什麼」更重要，社會資本主導向上流動的機會，也主導誰能看到哪些機會。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.34, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 30 } },
+  meritocracy: { label: 'Meritocracy 功績社會', description: '努力效果非常強，家庭背景的影響相對較小；多數人也都看得到相似的人生選單，但社會安全網偏薄，跌倒時較多要靠自己與家庭承接。', settings: { effortCoefficient: 0.55, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.06, socialCapitalCoefficient: 0.06, luckCoefficient: 0.1, randomNoise: 0.15, opportunityEquality: 85, unemploymentSupport: 25, healthcareSupport: 30, educationSupport: 25, childcareSupport: 20, housingSupport: 20, eldercareSupport: 25 } },
+  unequalOpportunity: { label: 'Unequal Opportunity 機會不均', description: '努力有效，但家庭資源明顯改變成功機率，也明顯改變一個人「看得到哪些選項」；社會安全網也很薄弱，衝擊發生時弱勢者承受的傷害更難被緩衝。', settings: { effortCoefficient: 0.28, familySESCoefficient: 0.32, culturalCapitalCoefficient: 0.12, socialCapitalCoefficient: 0.12, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 25, unemploymentSupport: 15, healthcareSupport: 15, educationSupport: 15, childcareSupport: 15, housingSupport: 15, eldercareSupport: 15 } },
+  highMobility: { label: 'High Mobility 高流動性', description: '家庭背景有影響，但教育可以明顯降低差距，多數人生選項也仍然對大部分人開放；較完整的社會安全網讓意外衝擊不至於直接摧毀一個人的處境。', settings: { effortCoefficient: 0.32, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.08, luckCoefficient: 0.1, randomNoise: 0.14, opportunityEquality: 70, unemploymentSupport: 70, healthcareSupport: 75, educationSupport: 65, childcareSupport: 70, housingSupport: 60, eldercareSupport: 65 } },
+  structuralAdvantage: { label: 'Structural Advantage 結構優勢累積', description: '家庭、文化、社會資本具有較強累積效果，資源不足的人有更多選項從一開始就不會出現，社會安全網也偏弱，劣勢容易一路累積下去。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.3, culturalCapitalCoefficient: 0.18, socialCapitalCoefficient: 0.16, luckCoefficient: 0.06, randomNoise: 0.1, opportunityEquality: 20, unemploymentSupport: 15, healthcareSupport: 20, educationSupport: 15, childcareSupport: 15, housingSupport: 10, eldercareSupport: 15 } },
+  lottery: { label: 'Lottery Society 純機運社會', description: '個人選擇的影響很小，多數結果由運氣與隨機波動決定；選單本身相對開放，社會安全網中等，能吸收一部分厄運帶來的衝擊，但結果仍難預測。', settings: { effortCoefficient: 0.08, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.05, socialCapitalCoefficient: 0.05, luckCoefficient: 0.42, randomNoise: 0.3, opportunityEquality: 65, unemploymentSupport: 40, healthcareSupport: 40, educationSupport: 40, childcareSupport: 40, housingSupport: 40, eldercareSupport: 40 } },
+  culturalCapitalSociety: { label: 'Cultural Capital Society 文化資本主導', description: '家庭的閱讀環境、教育期望等文化資本，比金錢更能預測結果，也更容易決定誰看得到哪些機會；教育相關的安全網稍強，但其他面向仍偏弱。', settings: { effortCoefficient: 0.22, familySESCoefficient: 0.12, culturalCapitalCoefficient: 0.32, socialCapitalCoefficient: 0.1, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 35, unemploymentSupport: 30, healthcareSupport: 30, educationSupport: 50, childcareSupport: 35, housingSupport: 25, eldercareSupport: 25 } },
+  networkSociety: { label: 'Network Society 人脈社會', description: '「認識誰」比「會什麼」更重要，社會資本主導向上流動的機會，也主導誰能看到哪些機會；正式的社會安全網偏弱，衝擊來臨時更依賴私人人脈而非制度。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.34, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 30, unemploymentSupport: 20, healthcareSupport: 25, educationSupport: 20, childcareSupport: 20, housingSupport: 20, eldercareSupport: 20 } },
 };
 const PRESET_ORDER = ['meritocracy', 'unequalOpportunity', 'highMobility', 'structuralAdvantage', 'lottery', 'culturalCapitalSociety', 'networkSociety'];
 /* 判斷目前 settings 是否剛好對應到某一組已命名的前提（容許極小誤差），
@@ -527,6 +538,46 @@ function getActivePresetKey(settings) {
     const p = PRESETS[key].settings;
     return PREMISE_COEFF_KEYS.every((k) => Math.abs((p[k] ?? DEFAULT_SETTINGS[k]) - (settings[k] ?? DEFAULT_SETTINGS[k])) < 0.001);
   }) || null;
+}
+/* 即時社會預覽 Live Society Preview：把目前的係數、機會平等程度、社會安全網設定，
+   翻譯成一段自然語言描述，讓老師／玩家在看到一堆滑桿數字之前，
+   先讀懂「這是一個什麼樣的社會」。純粹是文字說明，不影響任何模擬計算。 */
+function describeSociety(settings) {
+  const s = { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  const presetKey = getActivePresetKey(s);
+  const lines = [];
+
+  lines.push(presetKey
+    ? `目前套用的是「${PRESETS[presetKey].label}」前提。`
+    : '目前是一組自訂的社會前提（不完全對應任何一個預設情境）。');
+
+  const coeffEntries = [
+    ['effortCoefficient', '努力'], ['familySESCoefficient', '家庭背景'],
+    ['culturalCapitalCoefficient', '文化資本'], ['socialCapitalCoefficient', '社會資本'], ['luckCoefficient', '運氣'],
+  ];
+  const topCoeff = [...coeffEntries].sort((a, b) => s[b[0]] - s[a[0]])[0];
+  lines.push(`在決定「成功分數」的各項因素中，目前權重最高的是「${topCoeff[1]}」（係數 ${s[topCoeff[0]].toFixed(2)}）；隨機雜訊佔 ${(s.randomNoise * 100).toFixed(0)}%，代表即使所有可觀察條件都相同，結果仍會有一定程度無法預測的落差。`);
+
+  const oe = s.opportunityEquality;
+  const oeDesc = oe >= 75 ? '幾乎每個人都能看到相似的人生選單，出身背景很少直接關閉某些選項'
+    : oe >= 45 ? '多數人生選項對大部分人開放，但少部分需要家庭資源或極高能力的機會，仍會因背景而有落差'
+    : oe >= 20 ? '不少關鍵機會（例如交換、進修、內部推薦）需要一定的家庭資源，資源不足的人常常一開始就看不到這些選項'
+    : '機會分配相當不平等，家庭資源匱乏的人有相當多選項從一開始就不會出現在人生選單上';
+  lines.push(`機會平等程度為 ${oe}／100：${oeDesc}。`);
+
+  const netKeys = [
+    ['unemploymentSupport', '失業'], ['healthcareSupport', '醫療'], ['educationSupport', '教育'],
+    ['childcareSupport', '育兒'], ['housingSupport', '住房'], ['eldercareSupport', '長照'],
+  ];
+  const netAvg = netKeys.reduce((sum, [k]) => sum + s[k], 0) / netKeys.length;
+  const weakest = [...netKeys].sort((a, b) => s[a[0]] - s[b[0]])[0];
+  const strongest = [...netKeys].sort((a, b) => s[b[0]] - s[a[0]])[0];
+  const netDesc = netAvg >= 65 ? '整體而言，這個社會有相當完整的社會安全網，多數風險發生時，個人承受的衝擊會被大幅緩衝'
+    : netAvg >= 40 ? '這個社會有中等程度的社會安全網，部分風險會被緩衝，但仍有不少衝擊主要由個人與家庭承擔'
+    : '這個社會的社會安全網普遍薄弱，風雨來臨時，大部分衝擊都直接落在個人與家庭身上';
+  lines.push(`${netDesc}（平均支持度 ${netAvg.toFixed(0)}／100）；相對最弱的一環是「${weakest[1]}支持」（${s[weakest[0]]}），相對最強的是「${strongest[1]}支持」（${s[strongest[0]]}）。`);
+
+  return lines;
 }
 const PARENT_IN_POLITICS_BASE_PROBABILITY = 0.05;
 
@@ -661,21 +712,21 @@ const CORE_EVENTS = [
   { id: 'event_23_toddler_stimulation', stage: 'toddler', title: '幼兒期的啟蒙', description: '你還太小，記不清細節，但家裡的日常會慢慢形塑你之後的樣子。', tags: ['core'], weight: 1,
     choices: [
       { id: 'grow_up', text: '在家人親自陪伴下慢慢長大，常有人讀故事書給你聽', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'health', delta: 2 }] },
-      { id: 'busy_household', text: '家裡忙於生計，你大多時候自己打發時間', visibleEffects: [{ stat: 'happiness', delta: 1 }], hiddenEffects: [{ stat: 'interpersonal', delta: -2 }],
-        resultNarrative: '幼兒期能得到多少陪伴與刺激，往往跟家庭當時的經濟與時間餘裕有關，而不是嬰幼兒自己能決定的事。' },
-      { id: 'frequent_illness', text: '身體比較虛弱，家人常帶你四處求醫', visibleEffects: [{ stat: 'health', delta: -4 }], hiddenEffects: [{ stat: 'interpersonal', delta: 2 }, { stat: 'culturalCapital', delta: 1 }] },
+      { id: 'busy_household', text: '家裡忙於生計，你大多時候自己打發時間', visibleEffects: [{ stat: 'happiness', delta: 1 }], hiddenEffects: [{ stat: 'interpersonal', delta: -2, dampenedBy: 'childcareSupport' }],
+        resultNarrative: '幼兒期能得到多少陪伴與刺激，往往跟家庭當時的經濟與時間餘裕有關，而不是嬰幼兒自己能決定的事；公共育兒支持愈完整，這個落差就愈小。' },
+      { id: 'frequent_illness', text: '身體比較虛弱，家人常帶你四處求醫', visibleEffects: [{ stat: 'health', delta: -4, dampenedBy: 'childcareSupport' }], hiddenEffects: [{ stat: 'interpersonal', delta: 2 }, { stat: 'culturalCapital', delta: 1 }] },
     ] },
   { id: 'event_24_first_job_friction', stage: 'earlyCareer', title: '第一份工作的磨合', description: '進入職場後，你發現理想與現實有落差，主管交辦的任務也不總是你熟悉的。', tags: ['core'], weight: 1,
     choices: [
       { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4 }, { stat: 'happiness', delta: -4 }, { stat: 'ability', delta: 5 }] },
       { id: 'find_balance', text: '先求穩定，把生活步調顧好', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
-      { id: 'quit_abruptly', text: '受不了壓力，裸辭走人', visibleEffects: [{ stat: 'happiness', delta: 4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -6 }, { stat: 'happiness', delta: 5 }] },
+      { id: 'quit_abruptly', text: '受不了壓力，裸辭走人', visibleEffects: [{ stat: 'happiness', delta: 4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -6, dampenedBy: 'unemploymentSupport' }, { stat: 'happiness', delta: 5 }] },
     ] },
   { id: 'event_27_cram_school', stage: 'middleSchool', title: '要不要去補習班', description: '班上不少同學都去補習，你也在猶豫要不要跟進。', tags: ['core'], weight: 1,
     choices: [
       { id: 'go_cram', text: '去補習班加強', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'ability', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '補習能不能負擔、能不能持續，跟家庭的經濟資本有很大關係。' },
       { id: 'self_study', text: '靠自己安排讀書計畫', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'education', delta: 4 }, { stat: 'ability', delta: 4 }] },
-      { id: 'stop_caring', text: '完全不想讀書，得過且過', visibleEffects: [{ stat: 'effort', delta: -8 }], hiddenEffects: [{ stat: 'education', delta: -5 }, { stat: 'ability', delta: -2 }] },
+      { id: 'stop_caring', text: '完全不想讀書，得過且過', visibleEffects: [{ stat: 'effort', delta: -8 }], hiddenEffects: [{ stat: 'education', delta: -5, dampenedBy: 'educationSupport' }, { stat: 'ability', delta: -2, dampenedBy: 'educationSupport' }] },
     ] },
   { id: 'event_28_exchange_or_work', stage: 'collegeOrWork', title: '交換學生，還是先打工賺錢', description: '學校釋出交換學生名額，但你也在想是不是該先打工存錢、累積經驗。', tags: ['core'], weight: 1,
     choices: [
@@ -697,8 +748,8 @@ const CORE_EVENTS = [
   { id: 'event_30_health_check', stage: 'midlife', title: '健康檢查的紅字', description: '例行健檢報告出現幾項紅字，醫生建議你調整作息。', tags: ['core'], weight: 1,
     choices: [
       { id: 'adjust_lifestyle', text: '認真調整作息與運動習慣', visibleEffects: [{ stat: 'health', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
-      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8 }, { stat: 'happiness', delta: -3 }] },
-      { id: 'ignore_report', text: '乾脆不理會健檢報告', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -12 }, { stat: 'happiness', delta: -2 }] },
+      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8, dampenedBy: 'healthcareSupport' }, { stat: 'happiness', delta: -3 }] },
+      { id: 'ignore_report', text: '乾脆不理會健檢報告', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -12, dampenedBy: 'healthcareSupport' }, { stat: 'happiness', delta: -2 }] },
     ] },
   { id: 'event_25_late_life_choice', stage: 'lateLife', title: '退休前的抉擇', description: '再過幾年就要退休了，你在想要不要拚最後一段職涯高峰，還是把重心放回家庭與健康。', tags: ['core'], weight: 1,
     choices: [
@@ -724,7 +775,7 @@ const TIME_RELEVANT_EVENTS = [
     ] },
   { id: 'event_10_rent_or_buy', stage: 'youngAdultCareer', title: '房子，租還是買', description: '房東通知漲租金，你開始認真想「到底要不要買房」。', tags: ['time-relevant'], weight: 1,
     choices: [
-      { id: 'save_for_down_payment', text: '拚命存頭期款', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: -8, scaleBy: 'economicCapital', scaleFactor: -0.5 }],
+      { id: 'save_for_down_payment', text: '拚命存頭期款', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: -8, scaleBy: 'economicCapital', scaleFactor: -0.5, dampenedBy: 'housingSupport' }],
         narrativeBranches: [
           { condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '家裡願意支援一部分頭期款，壓力小了不少。' },
           { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '完全靠自己存錢，這條路會走得比較久。' },
@@ -748,7 +799,7 @@ const TIME_RELEVANT_EVENTS = [
     choices: [
       { id: 'care_myself', text: '自己承擔照顧責任', visibleEffects: [{ stat: 'happiness', delta: -6 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }, { stat: 'health', delta: -5 }, { stat: 'interpersonal', delta: 8 }] },
       { id: 'use_resources', text: '申請政府長照資源／聘請看護', visibleEffects: [{ stat: 'happiness', delta: -4 }], hiddenEffects: [{ stat: 'health', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '經濟資本會影響能選擇的資源與品質，但公共資源與親屬支援仍能組合運用。' },
-      { id: 'quit_job_to_care', text: '壓力過大，乾脆辭職全職照顧', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8 }, { stat: 'economicCapital', delta: -3 }, { stat: 'interpersonal', delta: 5 }], resultNarrative: '照顧責任常常迫使人退出職場，這也是許多中年勞動者職涯中斷的常見原因。' },
+      { id: 'quit_job_to_care', text: '壓力過大，乾脆辭職全職照顧', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8, dampenedBy: 'eldercareSupport' }, { stat: 'economicCapital', delta: -3, dampenedBy: 'eldercareSupport' }, { stat: 'interpersonal', delta: 5 }], resultNarrative: '照顧責任常常迫使人退出職場，這也是許多中年勞動者職涯中斷的常見原因；長照支持系統愈完整，這個選擇造成的職涯與經濟衝擊就愈能被緩衝。' },
     ] },
   { id: 'event_14_low_birthrate', stage: 'collegeOrWork', title: '少子化與招生', description: '你申請的學校今年招生人數創新低，學校釋出更多獎學金與彈性名額搶學生。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -780,7 +831,7 @@ const TIME_RELEVANT_EVENTS = [
       { id: 'join_reskilling', text: '報名內部轉職訓練，往新興職缺移動', visibleEffects: [{ stat: 'education', delta: 6 }, { stat: 'opportunity', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'economicCapital', scaleFactor: 0.5 }, { stat: 'ability', delta: 5 }],
         narrativeBranches: [{ condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '你比較早得知哪些新興職缺其實搶手的內部消息。' }] },
       { id: 'stay_put', text: '留在原本的崗位，觀望情勢', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -3 }] },
-      { id: 'resist_change', text: '抗拒轉型，堅持用舊方法工作', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8 }, { stat: 'opportunity', delta: -5 }] },
+      { id: 'resist_change', text: '抗拒轉型，堅持用舊方法工作', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8, dampenedBy: 'unemploymentSupport' }, { stat: 'opportunity', delta: -5, dampenedBy: 'unemploymentSupport' }] },
     ] },
   { id: 'event_19_going_abroad', stage: 'youngAdultCareer', title: '出走潮', description: '朋友一個個出國工作或打工度假，你也在猶豫要不要離開。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -960,12 +1011,24 @@ function createPlayer(rngSeed, isNPC) {
     hiddenOpportunities: [],
   };
 }
-function applyEffect(player, effect) {
+/* 社會安全網 Social Safety Net —— 制度不一定能阻止壞事發生，但可以改變壞事造成的
+   後果幅度。effect.dampenedBy 指向某一項安全網設定（例如 'unemploymentSupport'），
+   只有在這個 effect 是「負面」（delta < 0，代表某種損失）時才會被安全網強度縮小；
+   正面效果、以及沒有標記 dampenedBy 的效果，完全不受影響。SAFETY_NET_MAX_DAMPENING
+   是安全網開到最強（100）時，最多能削減多少比例的損失幅度。 */
+const SAFETY_NET_MAX_DAMPENING = 0.65;
+function applyEffect(player, effect, settings) {
   let delta = effect.delta;
   if (effect.scaleBy) {
     const scaleStat = player[effect.scaleBy] != null ? player[effect.scaleBy] : 50;
     const factor = effect.scaleFactor != null ? effect.scaleFactor : 1;
     delta = delta * (0.6 + (scaleStat / 100) * factor);
+  }
+  if (effect.dampenedBy && delta < 0) {
+    const fallback = DEFAULT_SETTINGS[effect.dampenedBy] != null ? DEFAULT_SETTINGS[effect.dampenedBy] : 50;
+    const raw = settings && settings[effect.dampenedBy] != null ? settings[effect.dampenedBy] : fallback;
+    const supportLevel = clamp(raw, 0, 100);
+    delta = delta * (1 - (supportLevel / 100) * SAFETY_NET_MAX_DAMPENING);
   }
   const key = effect.stat;
   const current = player[key] != null ? player[key] : 0;
@@ -973,8 +1036,8 @@ function applyEffect(player, effect) {
   const updated = clamp(current + delta, 0, isMoney ? Infinity : 100);
   return { ...player, [key]: updated };
 }
-function applyEffects(player, effects) {
-  return (effects || []).reduce((p, e) => applyEffect(p, e), player);
+function applyEffects(player, effects, settings) {
+  return (effects || []).reduce((p, e) => applyEffect(p, e, settings), player);
 }
 function getStatValue(player, statPath) {
   if (statPath.startsWith('family.')) return player.family[statPath.replace('family.', '')];
@@ -1068,15 +1131,15 @@ function resolveNarrative(player, choice) {
   return choice.resultNarrative;
 }
 const NEVER_FLIP = ['effort', 'interpersonal'];
-function applyChoice(player, event, choice, rng) {
+function applyChoice(player, event, choice, rng, settings) {
   let multiplier = 1;
   if (choice.probabilityModifiers && choice.probabilityModifiers.length > 0) {
     const p = computeModifiedProbability(0.35, player, choice.probabilityModifiers);
     multiplier = rng.probability(p) ? 1 : -0.7;
   }
   const applyMul = (e) => (NEVER_FLIP.includes(e.stat) ? e : { ...e, delta: e.delta * multiplier });
-  let updated = applyEffects(player, (choice.visibleEffects || []).map(applyMul));
-  updated = applyEffects(updated, (choice.hiddenEffects || []).map(applyMul));
+  let updated = applyEffects(player, (choice.visibleEffects || []).map(applyMul), settings);
+  updated = applyEffects(updated, (choice.hiddenEffects || []).map(applyMul), settings);
   const narrative = resolveNarrative(updated, choice);
   const result = { eventId: event.id, eventTitle: event.title, stage: event.stage, age: updated.age, choiceId: choice.id, choiceText: choice.text, narrative };
   updated = { ...updated, history: [...updated.history, result] };
@@ -1189,7 +1252,7 @@ function replaySession(seed, settings, pool, history) {
         const unlockedChoices = getUnlockedChoices(player, event, settings);
         player = recordOpportunityGap(player, event, unlockedChoices);
         const choice = event.choices.find((c) => c.id === record.choiceId) || event.choices[0];
-        const result = applyChoice(player, event, choice, eventsRng);
+        const result = applyChoice(player, event, choice, eventsRng, settings);
         player = result.player;
         historyIndex += 1;
       } else {
@@ -1218,7 +1281,7 @@ function simulateFullLife(options) {
          這一輪社會的機會結構，而不只是把所有人視為看得到相同選單。 */
       const visibleEvent = { ...event, choices: getUnlockedChoices(player, event, settings) };
       const choice = selector(player, visibleEvent, eventsRng);
-      const result = applyChoice(player, event, choice, eventsRng);
+      const result = applyChoice(player, event, choice, eventsRng, settings);
       player = result.player;
     }
   }
@@ -1776,6 +1839,12 @@ const NUMERIC_FIELDS = [
   { key: 'luckCoefficient', label: '運氣係數' },
   { key: 'randomNoise', label: '隨機雜訊' },
   { key: 'opportunityEquality', label: '機會平等程度（Opportunity Equality）' },
+  { key: 'unemploymentSupport', label: '社會安全網・失業支持' },
+  { key: 'healthcareSupport', label: '社會安全網・醫療支持' },
+  { key: 'educationSupport', label: '社會安全網・教育支持' },
+  { key: 'childcareSupport', label: '社會安全網・育兒支持' },
+  { key: 'housingSupport', label: '社會安全網・住房支持' },
+  { key: 'eldercareSupport', label: '社會安全網・長照支持' },
 ];
 const TOGGLE_FIELDS = [
   { key: 'enableFamilyCrisis', label: '是否開啟家庭危機事件' },
@@ -1794,6 +1863,14 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
         </div>
         <button onClick={onBack} className="text-sm text-inkFaint hover:text-ink transition-colors">返回首頁</button>
       </div>
+      <section className="mb-8">
+        <h2 className="text-sm text-inkDim mb-3">即時社會預覽（Live Society Preview）</h2>
+        <div className="panel p-4 space-y-2">
+          {describeSociety(settings).map((line, i) => (
+            <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
+          ))}
+        </div>
+      </section>
       <section className="mb-8">
         <h2 className="text-sm text-inkDim mb-3">預設情境（不預設哪一個是「正確答案」）</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1820,6 +1897,11 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
                 {key === 'opportunityEquality' && (
                   <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
                     這個滑桿不會直接改變任何人的分數。它控制的是「不同家庭背景的人，是否看得到相同的人生選項」——例如某些出國、進修或內部推薦的機會，在低機會平等的社會裡，可能需要家庭資源或極高能力才會出現在選單上；在高機會平等的社會裡，這些選項則對多數人開放。
+                  </p>
+                )}
+                {key === 'unemploymentSupport' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    以下六組「社會安全網」滑桿分別對應不同類型的風險（失業、醫療、教育、育兒、住房、長照）。每一組只會緩衝該類型事件造成的「負面」衝擊幅度，不會改變正面效果，也不會讓壞事不發生——它改變的是壞事發生時，一個人要獨自承擔多少。滑桿愈高，衝擊愈被制度分攤；滑桿愈低，衝擊愈全部落在個人與家庭身上。
                   </p>
                 )}
               </div>
