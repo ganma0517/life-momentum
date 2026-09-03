@@ -504,6 +504,9 @@ const CORE_EVENTS = [
           { condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '親友願意把你的履歷轉交主管，讓你多了一個被看見的機會。' },
           { condition: { stat: 'socialCapital', op: 'lte', value: 35 }, narrative: '你已經投出第 43 封履歷，仍然持續準備每一次面試。' },
         ] },
+      { id: 'ask_referral', text: '請認識的人內部推薦', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 8, scaleBy: 'socialCapital', scaleFactor: 0.8 }, { stat: 'socialCapital', delta: 2 }],
+        resultNarrative: '內部推薦能不能成立，取決於你原本就擁有的人脈存量。' },
+      { id: 'apply_widely', text: '海投履歷，廣泛嘗試各種職缺', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'opportunity', delta: 3 }, { stat: 'stress', delta: 4 }] },
     ] },
   { id: 'event_23_toddler_stimulation', stage: 'toddler', title: '幼兒期的啟蒙', description: '你還太小，記不清細節，但家裡的日常會慢慢形塑你之後的樣子。', tags: ['core'], weight: 1,
     choices: [
@@ -580,6 +583,7 @@ const TIME_RELEVANT_EVENTS = [
   { id: 'event_14_low_birthrate', stage: 'collegeOrWork', title: '少子化與招生', description: '你申請的學校今年招生人數創新低，學校釋出更多獎學金與彈性名額搶學生。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'acknowledge', text: '把握這波獎學金與名額', visibleEffects: [{ stat: 'opportunity', delta: 6 }], resultNarrative: '制度環境本身也在變動，不是所有機會都來自個人努力。' },
+      { id: 'skeptical', text: '覺得誘因不明確，維持原本的升學計畫', visibleEffects: [{ stat: 'effort', delta: 4 }] },
     ] },
   { id: 'event_15_influencer_economy', stage: 'youngAdultCareer', title: '接案／網紅經濟', description: '你經營的社群帳號突然有一支影片爆紅。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -629,7 +633,73 @@ const TIME_RELEVANT_EVENTS = [
     ] },
 ];
 
-const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS];
+const STRUCTURE_EVENTS = [
+  { id: 'event_39_typhoon_school', stage: 'elementary', title: '天災：颱風停班停課', description: '一場強颱來襲，學校連續停課三天，社區也傳出淹水災情。你要怎麼安排這幾天？', tags: ['core', 'disaster'], weight: 1,
+    choices: [
+      { id: 'study_at_home', text: '在家自己讀書、寫作業', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 3, scaleBy: 'culturalCapital', scaleFactor: 0.4 }] },
+      { id: 'help_clean_up', text: '家裡淹水，跟著大人一起清理家園', visibleEffects: [{ stat: 'effort', delta: 5 }], hiddenEffects: [{ stat: 'stress', delta: 8 }, { stat: 'health', delta: -3 }],
+        narrativeBranches: [
+          { condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '家裡有保費、住家地勢也較高，這次受損不大，很快就恢復正常。' },
+          { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '住家地勢低、缺乏防災準備，這次淹水造成不小的損失，得花不少時間才能復原。' },
+        ] },
+      { id: 'join_neighborhood_aid', text: '加入社區／鄰里的自主救災行動', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }],
+        resultNarrative: '天災面前，社區裡原本就存在的互助網絡，往往比個人準備更快發揮作用。' },
+    ] },
+  { id: 'event_40_disaster_recovery', stage: 'midlife', title: '天災後的重建', description: '一場地震造成社區部分房屋受損，重建的速度與品質，因為住戶的經濟能力、保險與人脈而出現落差。', tags: ['core', 'disaster'], weight: 1,
+    choices: [
+      { id: 'use_savings_insurance', text: '動用存款與保險理賠，盡快修繕', visibleEffects: [{ stat: 'wealth', delta: -80000 }], hiddenEffects: [{ stat: 'health', delta: 5 }, { stat: 'stress', delta: -3 }],
+        resultNarrative: '有沒有保險、存款夠不夠，很大程度決定了重建的速度與品質。' },
+      { id: 'apply_gov_relief', text: '申請政府災後補助，排隊等待審核', visibleEffects: [{ stat: 'stress', delta: 6 }], hiddenEffects: [{ stat: 'wealth', delta: -15000 }],
+        resultNarrative: '公共資源確實存在，但申請流程與等待時間本身，也是一種不容忽視的成本。' },
+      { id: 'rely_on_community', text: '靠親友鄰里互相支援、共渡難關', visibleEffects: [{ stat: 'stress', delta: 4 }], hiddenEffects: [{ stat: 'socialCapital', delta: 5 }] },
+    ] },
+  { id: 'event_41_scholarship_application', stage: 'highSchool', title: '政府補助：弱勢助學金申請', description: '教育部推出「弱勢助學金」，只要符合家庭經濟條件即可申請，但申請需要準備不少證明文件與流程。', tags: ['core', 'regional-inequality'], weight: 1,
+    choices: [
+      { id: 'apply_grant', text: '花時間準備文件，提出申請', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 3 }],
+        narrativeBranches: [
+          { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '你順利通過資格審查，這筆助學金明顯減輕了家裡的壓力。' },
+          { condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '審查後發現家庭收入超過門檻，沒有申請成功，但你熟悉了一次公部門的申請流程。' },
+        ] },
+      { id: 'skip_paperwork', text: '覺得文件手續太麻煩，放棄申請', visibleEffects: [{ stat: 'effort', delta: -2 }], hiddenEffects: [{ stat: 'stress', delta: -2 }] },
+      { id: 'ask_school_counselor', text: '請學校輔導室協助跑流程', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'socialCapital', delta: 3 }, { stat: 'education', delta: 2 }] },
+    ] },
+  { id: 'event_42_rural_urban_school_resources', stage: 'elementary', title: '城鄉學校資源落差', description: '你就讀的學校今年是否獲得額外的圖書、電腦教室與才藝課程資源，往往跟學校所在地區、招生規模與地方財政有關。', tags: ['core', 'regional-inequality'], weight: 1,
+    choices: [
+      { id: 'use_school_resources', text: '善用學校現有的資源與課程', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 4, scaleBy: 'culturalCapital', scaleFactor: 0.3 }] },
+      { id: 'add_private_resources', text: '家人額外幫你安排校外資源（才藝班、補習）', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'economicCapital', scaleFactor: 0.7 }],
+        resultNarrative: '校內、校外資源加總起來，會讓不同家庭背景的學生，站在不太一樣的起跑點上。' },
+    ] },
+  { id: 'event_43_healthcare_access', stage: 'lateLife', title: '城鄉醫療可近性', description: '你需要定期回診追蹤，但住家附近的醫療資源多寡，跟你住在都會區還是偏鄉地區有很大關係。', tags: ['core', 'regional-inequality'], weight: 1,
+    choices: [
+      { id: 'travel_to_hospital', text: '花時間往返大醫院回診', visibleEffects: [{ stat: 'stress', delta: 5 }], hiddenEffects: [{ stat: 'health', delta: 6 }] },
+      { id: 'use_local_clinic', text: '就近使用在地診所或衛生所', visibleEffects: [{ stat: 'stress', delta: -2 }], hiddenEffects: [{ stat: 'health', delta: 3 }],
+        resultNarrative: '醫療資源的地理分布不均，是許多偏鄉居民共同面對的現實課題。' },
+    ] },
+  { id: 'event_44_social_media_echo_chamber', stage: 'highSchool', title: '社群同溫層', description: '你在社群媒體上追蹤的帳號，多半跟你原本的立場與喜好相近，演算法也持續推送類似觀點的內容給你。', tags: ['core', 'social-network'], weight: 1,
+    choices: [
+      { id: 'follow_diverse_views', text: '主動追蹤不同立場的帳號，多方了解', visibleEffects: [{ stat: 'effort', delta: 5 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 3 }, { stat: 'opportunity', delta: 2 }] },
+      { id: 'stay_in_bubble', text: '維持現在的習慣，繼續看順眼的內容', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'stress', delta: -2 }] },
+      { id: 'mobilize_in_bubble', text: '在同溫層裡積極分享、動員朋友響應', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }, { stat: 'politicalCapital', delta: 2 }] },
+    ] },
+  { id: 'event_45_weak_ties_job', stage: 'youngAdultCareer', title: '人脈存摺：弱連結的力量', description: '你聽說「很多工作機會其實是透過不常聯絡的舊識介紹的」，這跟你原本熟悉的「靠實力吃飯」直覺不太一樣。', tags: ['core', 'social-network'], weight: 1,
+    choices: [
+      { id: 'reconnect_old_contacts', text: '主動聯絡久未聯繫的舊同學、舊同事', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'socialCapital', delta: 5 }, { stat: 'opportunity', delta: 4 }],
+        resultNarrative: '社會學家 Granovetter 稱這種現象為「弱連結的力量」——不常聯絡的人，反而更容易帶來全新的資訊與機會。' },
+      { id: 'focus_on_skill', text: '專心把手上的工作做好，相信實力會被看見', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 3 }] },
+      { id: 'attend_industry_events', text: '參加產業交流活動，認識新朋友', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }, { stat: 'culturalCapital', delta: 2 }] },
+    ] },
+  { id: 'event_46_mutual_aid_network', stage: 'midlife', title: '社區互助網絡', description: '家裡臨時出了狀況（可能是照顧、經濟或健康問題），你發現能不能撐過去，很大程度取決於身邊有沒有可以互相幫忙的人。', tags: ['core', 'social-network'], weight: 1,
+    choices: [
+      { id: 'ask_for_help', text: '向親友、鄰里、社群求助', visibleEffects: [{ stat: 'stress', delta: -6 }], hiddenEffects: [{ stat: 'socialCapital', delta: 3 }],
+        narrativeBranches: [
+          { condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '你平常累積的關係網絡這次派上用場，很快就找到能幫忙的人。' },
+          { condition: { stat: 'socialCapital', op: 'lte', value: 35 }, narrative: '身邊可以求助的人不多，這段時間格外辛苦，大多只能靠自己想辦法。' },
+        ] },
+      { id: 'handle_alone', text: '獨自扛下所有的事，不想麻煩別人', visibleEffects: [{ stat: 'stress', delta: 10 }], hiddenEffects: [{ stat: 'health', delta: -5 }] },
+    ] },
+];
+
+const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS, ...STRUCTURE_EVENTS];
 
 /* ============================================================
    5. GAME ENGINE — family generation, player creation, effects, events
@@ -979,8 +1049,13 @@ function Panel({ eyebrow, children, className }) {
 function ContinueButton({ onClick, label }) {
   return <button onClick={onClick} className="btn-primary px-6 py-2.5 text-sm mt-6">{label || '繼續'}</button>;
 }
-function ChoiceButton({ text, onClick }) {
-  return <button onClick={onClick} className="choice-btn w-full text-left px-5 py-4 text-ink text-[15px]">{text}</button>;
+function ChoiceButton({ text, onClick, disabled }) {
+  return (
+    <button onClick={onClick} disabled={disabled} aria-disabled={disabled}
+      className={'choice-btn w-full text-left px-5 py-4 text-ink text-[15px] transition-opacity duration-300 ' + (disabled ? 'opacity-40 cursor-not-allowed' : 'opacity-100')}>
+      {text}
+    </button>
+  );
 }
 function StatBox({ label, value }) {
   return (
@@ -1078,14 +1153,29 @@ function PlayerCard({ player }) {
     </div>
   );
 }
+const READING_PAUSE_MIN_MS = 2000;
+const READING_PAUSE_MAX_MS = 3000;
 function EventCard({ event, onChoose }) {
+  const pauseMs = useMemo(() => READING_PAUSE_MIN_MS + Math.random() * (READING_PAUSE_MAX_MS - READING_PAUSE_MIN_MS), [event.id]);
+  const [locked, setLocked] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState(Math.ceil(pauseMs / 1000));
+  useEffect(() => {
+    setLocked(true);
+    setSecondsLeft(Math.ceil(pauseMs / 1000));
+    const tickId = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const unlockId = setTimeout(() => { setLocked(false); clearInterval(tickId); }, pauseMs);
+    return () => { clearInterval(tickId); clearTimeout(unlockId); };
+  }, [event.id, pauseMs]);
   return (
     <div key={event.id} className="panel p-6 fade-up">
       <div className="eyebrow mb-2">{LIFE_STAGE_LABELS[event.stage]} 檔案</div>
       <h2 className="font-display text-lg text-ink mb-2">{event.title}</h2>
       <p className="text-inkDim leading-relaxed mb-6 whitespace-pre-line">{event.description}</p>
       <div className="flex flex-col gap-3">
-        {event.choices.map((choice) => <ChoiceButton key={choice.id} text={choice.text} onClick={() => onChoose(choice.id)} />)}
+        {event.choices.map((choice) => <ChoiceButton key={choice.id} text={choice.text} disabled={locked} onClick={() => onChoose(choice.id)} />)}
+      </div>
+      <div className={'mt-4 text-xs font-mono transition-opacity duration-300 ' + (locked ? 'opacity-100 text-brass' : 'opacity-0 h-0 overflow-hidden')} aria-live="polite">
+        請先讀完內文再選擇 · {secondsLeft > 0 ? secondsLeft + ' 秒後開放選項' : '即將開放'}
       </div>
     </div>
   );
@@ -1171,6 +1261,21 @@ function getSeedFromUrl() {
   } catch (e) { return ''; }
 }
 
+function DisclaimerScreen({ onAck }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="eyebrow mb-3">使用須知</div>
+      <h1 className="font-display text-2xl sm:text-3xl text-ink mb-8">在開始之前，請先閱讀</h1>
+      <div className="panel p-6 sm:p-8 max-w-xl text-left space-y-4 text-sm text-inkDim leading-relaxed mb-8">
+        <p><span className="text-ink font-medium">課程教材聲明：</span>本網頁為社會學課程之互動教材，用於協助學習者理解統計推論（如 p 值、干擾變項、多重檢定與效果量）的概念，不作為其他用途。</p>
+        <p>遊戲中出現的人物、家庭、事件、職業、地名與所有情節，均為模擬與虛構內容，由電腦亂數程序產生，<span className="text-ink font-medium">與任何真實存在或曾經存在的人物、家庭或事件均無關聯，如有雷同，純屬巧合。</span></p>
+        <p><span className="text-ink font-medium">閱讀停滯設計：</span>遊戲中每次出現新的人生事件，選項按鈕會先暫時鎖定 2–3 秒，這段時間僅供你確實讀完事件內文，不影響遊戲結果，時間到後選項會自動開放。</p>
+      </div>
+      <button onClick={onAck} className="btn-primary px-8 py-3.5">我已閱讀並理解，繼續</button>
+    </div>
+  );
+}
+
 function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }) {
   const [showSeedInput, setShowSeedInput] = useState(false);
   const [seedValue, setSeedValue] = useState('');
@@ -1204,6 +1309,10 @@ function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }
         {hasSave && <button onClick={onContinue} className="btn-ghost w-full py-3 text-sm">繼續上次人生</button>}
         <button onClick={onShowHowTo} className="btn-ghost w-full py-3 text-sm">遊戲說明</button>
         <button onClick={onShowTeacher} className="btn-ghost w-full py-3 text-sm opacity-70">教師模式</button>
+      </div>
+      <div className="mt-14 text-[11px] text-inkFaint font-mono leading-relaxed">
+        <p>中央研究院社會學研究所　林文正　博士後研究員</p>
+        <p>社會學互動講義</p>
       </div>
     </div>
   );
@@ -1404,6 +1513,20 @@ function TwentyTestsStep({ seed, onContinue }) {
   );
 }
 
+const REFERENCE_ITEMS = [
+  { citation: 'Wasserstein, R. L., & Lazar, N. A. (2016). The ASA Statement on p-Values: Context, Process, and Purpose. The American Statistician, 70(2), 129–133.', note: 'p 值的正確定義與常見誤用' },
+  { citation: 'Simmons, J. P., Nelson, L. D., & Simonsohn, U. (2011). False-Positive Psychology: Undisclosed Flexibility in Data Collection and Analysis Allows Presenting Anything as Significant. Psychological Science, 22(11), 1359–1366.', note: 'p-hacking 與多重檢定的實證示範' },
+  { citation: 'Ioannidis, J. P. A. (2005). Why Most Published Research Findings Are False. PLoS Medicine, 2(8), e124.', note: '多重檢定、發表偏誤與假陽性' },
+  { citation: 'Cohen, J. (1988). Statistical Power Analysis for the Behavioral Sciences (2nd ed.). Lawrence Erlbaum Associates.', note: '效果量（effect size）的經典定義與判準' },
+  { citation: 'Bourdieu, P. (1986). The Forms of Capital. In J. Richardson (Ed.), Handbook of Theory and Research for the Sociology of Education (pp. 241–258). Greenwood.', note: '文化資本、經濟資本、社會資本的理論來源' },
+  { citation: 'Coleman, J. S. (1988). Social Capital in the Creation of Human Capital. American Journal of Sociology, 94, S95–S120.', note: '社會資本如何轉化為教育與職涯機會' },
+  { citation: 'Granovetter, M. S. (1973). The Strength of Weak Ties. American Journal of Sociology, 78(6), 1360–1380.', note: '「人脈存摺」事件中弱連結概念的理論出處' },
+];
+const ONLINE_RESOURCES = [
+  { label: '中央研究院人文社會科學研究中心調查研究專題中心（華人社會調查、學術調查資料庫）', url: 'https://srda.sinica.edu.tw/' },
+  { label: '台灣社會變遷基本調查（Taiwan Social Change Survey）', url: 'https://tscs.sinica.edu.tw/' },
+  { label: 'American Statistical Association — Statement on p-Values', url: 'https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf' },
+];
 function FinalScreen({ onRestart, onSameSeed, onNewLife }) {
   return (
     <div className="text-center py-12 fade-up">
@@ -1412,10 +1535,31 @@ function FinalScreen({ onRestart, onSameSeed, onNewLife }) {
       <p className="font-display text-2xl text-inkDim mb-3">你的人生，不只由你決定。</p>
       <p className="font-display text-2xl text-ink mb-6">但你的選擇，仍然是人生的一部分。</p>
       <p className="text-xs text-inkFaint font-mono mb-10">個人能動性 × 社會結構 × 機會 × 運氣</p>
-      <div className="flex flex-col gap-3 max-w-xs mx-auto">
+      <div className="flex flex-col gap-3 max-w-xs mx-auto mb-14">
         <button onClick={onRestart} className="btn-primary py-3 text-sm">重新投胎</button>
         <button onClick={onSameSeed} className="btn-ghost py-3 text-sm">使用相同 Seed 重玩</button>
         <button onClick={onNewLife} className="btn-ghost py-3 text-sm">換一個人生</button>
+      </div>
+      <div className="max-w-xl mx-auto text-left">
+        <Panel eyebrow="參考文獻與延伸閱讀">
+          <h3 className="text-sm text-ink font-medium mb-3">學術文獻</h3>
+          <ol className="space-y-3 mb-6">
+            {REFERENCE_ITEMS.map((ref, i) => (
+              <li key={i} className="text-xs text-inkDim leading-relaxed">
+                <span className="text-inkFaint font-mono mr-2">[{i + 1}]</span>{ref.citation}
+                <span className="block text-inkFaint mt-0.5 ml-6">— {ref.note}</span>
+              </li>
+            ))}
+          </ol>
+          <h3 className="text-sm text-ink font-medium mb-3">線上資源</h3>
+          <ul className="space-y-2">
+            {ONLINE_RESOURCES.map((res, i) => (
+              <li key={i} className="text-xs text-inkDim leading-relaxed">
+                <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-teal hover:underline break-all">{res.label}</a>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       </div>
     </div>
   );
@@ -1722,6 +1866,39 @@ function AnalysisScreen({ seed, player, npcDataset, selfAttribution, resetGame, 
    13. APP ROOT — state machine + localStorage persistence
    ============================================================ */
 const SAVE_KEY = 'life-momentum-save-v1';
+const DISCLAIMER_KEY = 'life-momentum-disclaimer-ack-v1';
+function loadDisclaimerAck() {
+  try { return window.localStorage.getItem(DISCLAIMER_KEY) === '1'; } catch (e) { return false; }
+}
+function writeDisclaimerAck() {
+  try { window.localStorage.setItem(DISCLAIMER_KEY, '1'); } catch (e) { /* ignore */ }
+}
+
+const VIEW_MODE_KEY = 'life-momentum-view-mode-v1';
+function loadViewMode() {
+  try {
+    const saved = window.localStorage.getItem(VIEW_MODE_KEY);
+    if (saved === 'desktop' || saved === 'mobile') return saved;
+  } catch (e) { /* ignore */ }
+  try { return window.innerWidth < 700 ? 'mobile' : 'desktop'; } catch (e) { return 'desktop'; }
+}
+function writeViewMode(mode) {
+  try { window.localStorage.setItem(VIEW_MODE_KEY, mode); } catch (e) { /* ignore */ }
+}
+function ViewModeShell({ mode, onChangeMode, children }) {
+  const isMobile = mode === 'mobile';
+  return (
+    <div className="min-h-screen w-full flex justify-center" style={{ background: 'var(--bg)' }}>
+      <div className="fixed top-3 right-3 z-50 flex items-center gap-1 bg-surface2/95 backdrop-blur border border-borderc rounded-full p-1 shadow-lg">
+        <button onClick={() => onChangeMode('desktop')} className={'px-3 py-1.5 rounded-full text-xs font-mono whitespace-nowrap transition-colors ' + (!isMobile ? 'bg-brass text-[#191307]' : 'text-inkFaint hover:text-ink')}>💻 電腦模式</button>
+        <button onClick={() => onChangeMode('mobile')} className={'px-3 py-1.5 rounded-full text-xs font-mono whitespace-nowrap transition-colors ' + (isMobile ? 'bg-brass text-[#191307]' : 'text-inkFaint hover:text-ink')}>📱 手機模式</button>
+      </div>
+      <div className={isMobile ? 'w-full max-w-[430px] min-h-screen border-x border-borderStrong' : 'w-full min-h-screen'}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function loadSave() {
   try {
@@ -1740,6 +1917,9 @@ function randomSeed() {
 }
 
 function App() {
+  const [disclaimerAcked, setDisclaimerAcked] = useState(() => loadDisclaimerAck());
+  const [viewMode, setViewMode] = useState(() => loadViewMode());
+  useEffect(() => { writeViewMode(viewMode); }, [viewMode]);
   const initial = useMemo(() => loadSave(), []);
   const [seed, setSeed] = useState(initial && initial.seed ? initial.seed : null);
   const [history, setHistory] = useState(initial && Array.isArray(initial.history) ? initial.history : []);
@@ -1826,29 +2006,34 @@ function App() {
 
   const hasSave = !!seed && history.length > 0;
 
+  if (!disclaimerAcked) {
+    return <DisclaimerScreen onAck={() => { writeDisclaimerAck(); setDisclaimerAcked(true); }} />;
+  }
+
+  let content;
   if (phase === 'home') {
-    return <HomeScreen onStart={startNewGame} onContinue={continueGame} hasSave={hasSave} onShowHowTo={() => setPhase('howto')} onShowTeacher={() => setPhase('teacher')} />;
-  }
-  if (phase === 'howto') {
-    return <HowToScreen onBack={() => setPhase('home')} />;
-  }
-  if (phase === 'teacher') {
-    return <TeacherScreen settings={settings} updateSettings={updateSettings} applyPreset={applyPreset} resetSettingsToDefault={resetSettingsToDefault} onBack={() => setPhase('home')} />;
-  }
-  if (phase === 'analysis') {
-    return (
+    content = <HomeScreen onStart={startNewGame} onContinue={continueGame} hasSave={hasSave} onShowHowTo={() => setPhase('howto')} onShowTeacher={() => setPhase('teacher')} />;
+  } else if (phase === 'howto') {
+    content = <HowToScreen onBack={() => setPhase('home')} />;
+  } else if (phase === 'teacher') {
+    content = <TeacherScreen settings={settings} updateSettings={updateSettings} applyPreset={applyPreset} resetSettingsToDefault={resetSettingsToDefault} onBack={() => setPhase('home')} />;
+  } else if (phase === 'analysis') {
+    content = (
       <AnalysisScreen
         seed={seed} player={session.player} npcDataset={npcDataset} selfAttribution={selfAttribution}
         resetGame={resetGame} startNewGame={startNewGame} onDone={() => {}}
       />
     );
+  } else {
+    content = (
+      <GameScreen
+        player={session.player} nextEvent={session.nextEvent} phase={phase}
+        choose={choose} goToAttribution={goToAttribution} submitAttribution={submitAttribution} goToAnalysis={goToAnalysis}
+      />
+    );
   }
-  return (
-    <GameScreen
-      player={session.player} nextEvent={session.nextEvent} phase={phase}
-      choose={choose} goToAttribution={goToAttribution} submitAttribution={submitAttribution} goToAnalysis={goToAnalysis}
-    />
-  );
+
+  return <ViewModeShell mode={viewMode} onChangeMode={setViewMode}>{content}</ViewModeShell>;
 }
 
 const rootEl = document.getElementById('root');
