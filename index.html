@@ -513,6 +513,10 @@ const DEFAULT_SETTINGS = {
      不改變現有平衡），100 = 照顧責任高度集中在女性身上，使女性在照顧相關負面衝擊中
      承受更大代價、男性承受較小代價。 */
   careDistributionEquality: 0,
+  /* 時間與照護制度 Time & Care System：standardWorkHours 40 小時＋overtimeCulture 50
+     為預設中點（等於不改變現有平衡）；commuteBurden、careMarketization 同樣以 50 為
+     不改變基準的中點。 */
+  standardWorkHours: 40, overtimeCulture: 50, commuteBurden: 50, careMarketization: 50,
   /* 世代衝擊 Cohort Shock：每個開關預設關閉，教師可自由開啟一種或多種總體衝擊，
      讓同一輪模擬的所有人（玩家＋NPC）共同經歷同一個總體事件，但依個人條件承受不同幅度。 */
   enableRecessionShock: false, enableHousingBoomShock: false, enablePandemicShock: false, enableAutomationShock: false,
@@ -552,6 +556,10 @@ const SETTINGS_BOUNDS = {
   careerHealthConflict: { min: 0, max: 100, step: 5 },
   careCareerConflict: { min: 0, max: 100, step: 5 },
   careDistributionEquality: { min: 0, max: 100, step: 5 },
+  standardWorkHours: { min: 35, max: 50, step: 5 },
+  overtimeCulture: { min: 0, max: 100, step: 5 },
+  commuteBurden: { min: 0, max: 100, step: 5 },
+  careMarketization: { min: 0, max: 100, step: 5 },
 };
 function clampSettings(settings) {
   const out = { ...settings };
@@ -752,7 +760,7 @@ const CORE_EVENTS = [
         ] },
       { id: 'ask_referral', text: '請認識的人內部推薦', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 8, scaleBy: 'socialCapital', scaleFactor: 0.8, conversionType: 'socialCapitalToOpportunity' }, { stat: 'socialCapital', delta: 2 }],
         resultNarrative: '內部推薦能不能成立，取決於你原本就擁有的人脈存量。' },
-      { id: 'apply_widely', text: '海投履歷，廣泛嘗試各種職缺', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'opportunity', delta: 3 }, { stat: 'happiness', delta: -3 }] },
+      { id: 'apply_widely', text: '海投履歷，廣泛嘗試各種職缺', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'opportunity', delta: 3 }, { stat: 'happiness', delta: -3, commuteSensitive: true }] },
     ] },
   { id: 'event_23_toddler_stimulation', stage: 'toddler', title: '幼兒期的啟蒙', description: '你還太小，記不清細節，但家裡的日常會慢慢形塑你之後的樣子。', tags: ['core'], weight: 1,
     choices: [
@@ -763,7 +771,7 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_24_first_job_friction', stage: 'earlyCareer', title: '第一份工作的磨合', description: '進入職場後，你發現理想與現實有落差，主管交辦的任務也不總是你熟悉的。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4, conversionType: 'socialCapitalToOpportunity' }, { stat: 'happiness', delta: -4, tradeoffAmplifiedBy: 'careerFamilyConflict' }, { stat: 'ability', delta: 5 }] },
+      { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4, conversionType: 'socialCapitalToOpportunity' }, { stat: 'happiness', delta: -4, tradeoffAmplifiedBy: 'careerFamilyConflict', workIntensitySensitive: true }, { stat: 'ability', delta: 5 }] },
       { id: 'find_balance', text: '先求穩定，把生活步調顧好', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
       { id: 'quit_abruptly', text: '受不了壓力，裸辭走人', visibleEffects: [{ stat: 'happiness', delta: 4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -6, dampenedBy: 'unemploymentSupport' }, { stat: 'happiness', delta: 5 }] },
     ] },
@@ -793,7 +801,7 @@ const CORE_EVENTS = [
   { id: 'event_30_health_check', stage: 'midlife', title: '健康檢查的紅字', description: '例行健檢報告出現幾項紅字，醫生建議你調整作息。', tags: ['core'], weight: 1,
     choices: [
       { id: 'adjust_lifestyle', text: '認真調整作息與運動習慣', visibleEffects: [{ stat: 'health', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
-      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8, dampenedBy: 'healthcareSupport', tradeoffAmplifiedBy: 'careerHealthConflict' }, { stat: 'happiness', delta: -3 }] },
+      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8, dampenedBy: 'healthcareSupport', tradeoffAmplifiedBy: 'careerHealthConflict', workIntensitySensitive: true }, { stat: 'happiness', delta: -3, workIntensitySensitive: true }] },
       { id: 'ignore_report', text: '乾脆不理會健檢報告', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -12, dampenedBy: 'healthcareSupport' }, { stat: 'happiness', delta: -2 }] },
     ] },
   { id: 'event_25_late_life_choice', stage: 'lateLife', title: '退休前的抉擇', description: '再過幾年就要退休了，你在想要不要拚最後一段職涯高峰，還是把重心放回家庭與健康。', tags: ['core'], weight: 1,
@@ -1095,6 +1103,24 @@ const TRADEOFF_MAX_MULTIPLIER = 1.7;
    負面效果。教師設定 careDistributionEquality（0 = 照護責任分配平等，100 = 高度不平等）
    之後，女性承擔的代價會被放大、男性承擔的代價會被縮小——藉此呈現「不是性別本身
    決定結果，而是制度／規範透過時間分配的不對等，才造成了結果上的性別差距」。 */
+/* 時間與照護制度 §六 —— 標準工時＋加班文化組成一個「工作強度指數」（0–100，
+   標準工時 40 小時＋加班文化 50 為預設中點，等同不改變現有平衡）。effect.workIntensitySensitive
+   標記的負面效果（通常是職場相關的健康／幸福代價）會依這個指數被放大或縮小；
+   effect.commuteSensitive 則單獨依「通勤負擔」滑桿放大或縮小。家務市場化程度
+   （careMarketization）則疊加在「金錢→時間」資源轉換上：家務服務市場愈發達，
+   金錢就愈能有效換到時間。 */
+function computeWorkIntensity(settings) {
+  const hoursFallback = DEFAULT_SETTINGS.standardWorkHours;
+  const hoursRaw = settings && settings.standardWorkHours != null ? settings.standardWorkHours : hoursFallback;
+  const hoursIndex = clamp(((hoursRaw - 40) / 10) * 50 + 50, 0, 100);
+  const overtimeFallback = DEFAULT_SETTINGS.overtimeCulture;
+  const overtimeRaw = settings && settings.overtimeCulture != null ? settings.overtimeCulture : overtimeFallback;
+  return clamp(hoursIndex * 0.5 + clamp(overtimeRaw, 0, 100) * 0.5, 0, 100);
+}
+function tradeoffMultiplier(strength0to100) {
+  const s = clamp(strength0to100, 0, 100);
+  return TRADEOFF_MIN_MULTIPLIER + (s / 100) * (TRADEOFF_MAX_MULTIPLIER - TRADEOFF_MIN_MULTIPLIER);
+}
 function applyEffect(player, effect, settings) {
   let delta = effect.delta;
   if (effect.scaleBy) {
@@ -1105,15 +1131,26 @@ function applyEffect(player, effect, settings) {
       const fallback = DEFAULT_SETTINGS[settingKey] != null ? DEFAULT_SETTINGS[settingKey] : 50;
       const raw = settings && settings[settingKey] != null ? settings[settingKey] : fallback;
       factor = factor * (clamp(raw, 0, 100) / 50);
+      if (effect.conversionType === 'moneyToTime') {
+        const marketFallback = DEFAULT_SETTINGS.careMarketization;
+        const marketRaw = settings && settings.careMarketization != null ? settings.careMarketization : marketFallback;
+        factor = factor * (clamp(marketRaw, 0, 100) / 50);
+      }
     }
     delta = delta * (0.6 + (scaleStat / 100) * factor);
   }
   if (effect.tradeoffAmplifiedBy && delta < 0) {
     const fallback = DEFAULT_SETTINGS[effect.tradeoffAmplifiedBy] != null ? DEFAULT_SETTINGS[effect.tradeoffAmplifiedBy] : 50;
     const raw = settings && settings[effect.tradeoffAmplifiedBy] != null ? settings[effect.tradeoffAmplifiedBy] : fallback;
-    const strength = clamp(raw, 0, 100);
-    const multiplier = TRADEOFF_MIN_MULTIPLIER + (strength / 100) * (TRADEOFF_MAX_MULTIPLIER - TRADEOFF_MIN_MULTIPLIER);
-    delta = delta * multiplier;
+    delta = delta * tradeoffMultiplier(raw);
+  }
+  if (effect.workIntensitySensitive && delta < 0) {
+    delta = delta * tradeoffMultiplier(computeWorkIntensity(settings));
+  }
+  if (effect.commuteSensitive && delta < 0) {
+    const fallback = DEFAULT_SETTINGS.commuteBurden;
+    const raw = settings && settings.commuteBurden != null ? settings.commuteBurden : fallback;
+    delta = delta * tradeoffMultiplier(raw);
   }
   if (effect.genderCareGated && delta < 0 && player.gender) {
     const fallback = DEFAULT_SETTINGS.careDistributionEquality;
@@ -2158,6 +2195,10 @@ const NUMERIC_FIELDS = [
   { key: 'careerHealthConflict', label: '抉擇強度・事業與健康衝突' },
   { key: 'careCareerConflict', label: '抉擇強度・照顧與事業衝突' },
   { key: 'careDistributionEquality', label: '性別照顧分工不均程度' },
+  { key: 'standardWorkHours', label: '時間與照護・標準工時（小時／週）' },
+  { key: 'overtimeCulture', label: '時間與照護・加班文化' },
+  { key: 'commuteBurden', label: '時間與照護・通勤負擔' },
+  { key: 'careMarketization', label: '時間與照護・家務市場化程度' },
 ];
 const TOGGLE_FIELDS = [
   { key: 'enableFamilyCrisis', label: '是否開啟家庭危機事件' },
@@ -2174,120 +2215,180 @@ const TOGGLE_FIELDS = [
   { key: 'enableEducationExpansionShock', label: '世代衝擊・教育擴張' },
   { key: 'enableWelfareReformShock', label: '世代衝擊・福利改革' },
 ];
-function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToDefault, onBack }) {
+/* 教師模式最終 UI §二十：把原本一長串設定，依照「這個滑桿其實在問學生什麼問題」
+   重新分組成七個步驟——Presets → Society → Life → Institutions → Random Events →
+   Statistics → Preview，最後用「開始課堂實驗」直接進入遊戲，不必先回首頁。
+   所有原本的欄位、滑桿與說明文字都原封不動保留，只是換了一種分組方式呈現。 */
+const TEACHER_STEPS = [
+  { key: 'presets', label: 'Presets', title: '① Presets', sub: '選擇社會模型' },
+  { key: 'society', label: 'Society', title: '② Society', sub: '不平等、流動性、機會結構' },
+  { key: 'life', label: 'Life', title: '③ Life', sub: '時間、工作、家庭與照護' },
+  { key: 'institutions', label: 'Institutions', title: '④ Institutions', sub: '教育、醫療、福利、住房' },
+  { key: 'randomEvents', label: 'Random Events', title: '⑤ Random Events', sub: '總體與隨機事件' },
+  { key: 'statistics', label: 'Statistics', title: '⑥ Statistics', sub: 'N、α、依變數、控制變數' },
+  { key: 'preview', label: 'Preview', title: '⑦ Preview', sub: '試跑 1,000 人' },
+];
+const NUMERIC_FIELD_STEP = {
+  effortCoefficient: 'society', familySESCoefficient: 'society', culturalCapitalCoefficient: 'society', socialCapitalCoefficient: 'society',
+  luckCoefficient: 'society', randomNoise: 'society', opportunityEquality: 'society',
+  wealthInequality: 'society', educationInequality: 'society', culturalCapitalInequality: 'society', socialCapitalInequality: 'society', regionalInequality: 'society',
+  moneyToTimeStrength: 'life', moneyToEducationStrength: 'life', socialCapitalToOpportunityStrength: 'life', culturalCapitalToEducationStrength: 'life',
+  careerFamilyConflict: 'life', careerHealthConflict: 'life', careCareerConflict: 'life', careDistributionEquality: 'life',
+  standardWorkHours: 'life', overtimeCulture: 'life', commuteBurden: 'life', careMarketization: 'life',
+  unemploymentSupport: 'institutions', healthcareSupport: 'institutions', educationSupport: 'institutions',
+  childcareSupport: 'institutions', housingSupport: 'institutions', eldercareSupport: 'institutions',
+  npcSampleSize: 'statistics', alphaThreshold: 'statistics',
+};
+const TOGGLE_FIELD_STEP = {
+  enableFamilyCrisis: 'randomEvents', enablePoliticalCapital: 'randomEvents', enableTimeRelevantEvents: 'randomEvents', blindMode: 'randomEvents',
+  enableRecessionShock: 'randomEvents', enableHousingBoomShock: 'randomEvents', enablePandemicShock: 'randomEvents', enableAutomationShock: 'randomEvents',
+  enableOffshoringShock: 'randomEvents', enableEducationExpansionShock: 'randomEvents', enableWelfareReformShock: 'randomEvents',
+  enableMultipleTestingLesson: 'statistics', enablePValueLesson: 'statistics',
+};
+function fieldCaption(key) {
+  const captions = {
+    opportunityEquality: '這個滑桿不會直接改變任何人的分數。它控制的是「不同家庭背景的人，是否看得到相同的人生選項」——例如某些出國、進修或內部推薦的機會，在低機會平等的社會裡，可能需要家庭資源或極高能力才會出現在選單上；在高機會平等的社會裡，這些選項則對多數人開放。',
+    wealthInequality: '以下五組「起始不平等」滑桿改變的是家庭背景的「分布離散程度」，不是平均值：50 為目前預設的分散程度，數值愈低代表這一代人的起跑點愈接近（壓縮），數值愈高代表贏家與輸家的起跑點差距被放大。',
+    unemploymentSupport: '以下六組「社會安全網」滑桿分別對應不同類型的風險（失業、醫療、教育、育兒、住房、長照）。每一組只會緩衝該類型事件造成的「負面」衝擊幅度，不會改變正面效果，也不會讓壞事不發生——它改變的是壞事發生時，一個人要獨自承擔多少。滑桿愈高，衝擊愈被制度分攤；滑桿愈低，衝擊愈全部落在個人與家庭身上。',
+    moneyToTimeStrength: '以下四組「資源轉換」滑桿控制某一類資本能多有效地換成另一種資源（例如金錢換時間、金錢換教育、社會資本換機會、文化資本換教育）。50 為目前預設換算率，數值愈高代表該類資本愈能「買到」對應資源，數值愈低代表該類資本愈難轉換。',
+    careerFamilyConflict: '以下三組「抉擇強度」滑桿放大魚與熊掌不可兼得的後座力（事業與家庭、事業與健康、照顧與事業）。50 為目前預設強度，數值愈高代表玩家在這些兩難抉擇中，選擇某一邊要付出的代價愈大。',
+    careDistributionEquality: '這個滑桿預設為 0（照顧責任由所有性別平均承擔，不改變現有平衡）。調高後，長照等「照顧型」事件的負面衝擊會更集中落在女性角色身上，男性角色承受的負面衝擊則相對變小，用來示範性別化的照顧分工如何轉譯為結構性落差。',
+    standardWorkHours: '以下四組「時間與照護制度」滑桿模擬 168 小時的人生時間預算如何被制度性地擠壓或釋放：標準工時（週）與加班文化共同決定「工作強度指數」，指數愈高，職場相關的健康／幸福代價愈被放大；40 小時、加班文化 50 為預設中點，不改變現有平衡。',
+    commuteBurden: '通勤負擔愈高，通勤相關的幸福代價愈被放大——通勤時間本質上是被制度（城市規劃、居住與工作地的距離）決定、但由個人承擔的時間成本。',
+    careMarketization: '家務市場化程度愈高，代表這個社會裡「花錢請人代勞家務／照護」愈普遍、愈有效率——會疊加在「金錢→時間」資源轉換上，讓有經濟資本的人更容易把錢換成時間；50 為預設中點，不改變現有平衡。',
+  };
+  return captions[key] || null;
+}
+function NumericFieldRow({ fieldKey, label, value, onChange }) {
+  const bound = SETTINGS_BOUNDS[fieldKey];
+  const caption = fieldCaption(fieldKey);
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-1"><span className="text-ink">{label}</span><span className="text-inkFaint font-mono">{value}</span></div>
+      <input type="range" min={bound.min} max={bound.max} step={bound.step} value={value} onChange={onChange} className="w-full range-slider" />
+      <div className="flex justify-between text-xs text-inkFaint font-mono"><span>{bound.min}</span><span>{bound.max}</span></div>
+      {caption && <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">{caption}</p>}
+    </div>
+  );
+}
+function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToDefault, onBack, onStartExperiment }) {
+  const [step, setStep] = useState('presets');
+  const stepIndex = TEACHER_STEPS.findIndex((s) => s.key === step);
+  const current = TEACHER_STEPS[stepIndex];
+  const goStep = (offset) => {
+    const next = TEACHER_STEPS[Math.min(TEACHER_STEPS.length - 1, Math.max(0, stepIndex + offset))];
+    setStep(next.key);
+  };
+  const numericForStep = NUMERIC_FIELDS.filter((f) => NUMERIC_FIELD_STEP[f.key] === step);
+  const toggleForStep = TOGGLE_FIELDS.filter((f) => TOGGLE_FIELD_STEP[f.key] === step);
   return (
     <div className="min-h-screen px-4 py-10 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <div className="eyebrow mb-1">教師模式</div>
-          <h1 className="font-display text-2xl text-ink">遊戲平衡設定</h1>
+          <div className="eyebrow mb-1">教師模式 · 社會世界實驗室</div>
+          <h1 className="font-display text-2xl text-ink">{current.title}</h1>
+          <p className="text-xs text-inkFaint mt-0.5">{current.sub}</p>
         </div>
-        <button onClick={onBack} className="text-sm text-inkFaint hover:text-ink transition-colors">返回首頁</button>
+        <button onClick={onBack} className="text-sm text-inkFaint hover:text-ink transition-colors shrink-0">返回首頁</button>
       </div>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">即時社會預覽（Live Society Preview）</h2>
-        <div className="panel p-4 space-y-2">
-          {describeSociety(settings).map((line, i) => (
-            <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
-          ))}
-        </div>
-      </section>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">預設情境（不預設哪一個是「正確答案」）</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {PRESET_ORDER.map((key) => (
-            <button key={key} onClick={() => applyPreset(key)} className="text-left panel hover:border-brass p-4 transition-colors">
-              <div className="text-ink font-medium mb-1">{PRESETS[key].label}</div>
-              <div className="text-xs text-inkFaint">{PRESETS[key].description}</div>
-            </button>
-          ))}
-        </div>
-      </section>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">Game Settings</h2>
-        <div className="panel p-4 space-y-4">
-          {NUMERIC_FIELDS.map(({ key, label }) => {
-            const bound = SETTINGS_BOUNDS[key];
-            const value = settings[key];
-            return (
-              <div key={key}>
-                <div className="flex justify-between text-sm mb-1"><span className="text-ink">{label}</span><span className="text-inkFaint font-mono">{value}</span></div>
-                <input type="range" min={bound.min} max={bound.max} step={bound.step} value={value}
-                  onChange={(e) => { const o = {}; o[key] = Number(e.target.value); updateSettings(o); }} className="w-full range-slider" />
-                <div className="flex justify-between text-xs text-inkFaint font-mono"><span>{bound.min}</span><span>{bound.max}</span></div>
-                {key === 'opportunityEquality' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    這個滑桿不會直接改變任何人的分數。它控制的是「不同家庭背景的人，是否看得到相同的人生選項」——例如某些出國、進修或內部推薦的機會，在低機會平等的社會裡，可能需要家庭資源或極高能力才會出現在選單上；在高機會平等的社會裡，這些選項則對多數人開放。
-                  </p>
-                )}
-                {key === 'unemploymentSupport' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    以下六組「社會安全網」滑桿分別對應不同類型的風險（失業、醫療、教育、育兒、住房、長照）。每一組只會緩衝該類型事件造成的「負面」衝擊幅度，不會改變正面效果，也不會讓壞事不發生——它改變的是壞事發生時，一個人要獨自承擔多少。滑桿愈高，衝擊愈被制度分攤；滑桿愈低，衝擊愈全部落在個人與家庭身上。
-                  </p>
-                )}
-                {key === 'wealthInequality' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    以下五組「起始不平等」滑桿改變的是家庭背景的「分布離散程度」，不是平均值：50 為目前預設的分散程度，數值愈低代表這一代人的起跑點愈接近（壓縮），數值愈高代表贏家與輸家的起跑點差距被放大。
-                  </p>
-                )}
-                {key === 'moneyToTimeStrength' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    以下四組「資源轉換」滑桿控制某一類資本能多有效地換成另一種資源（例如金錢換時間、金錢換教育、社會資本換機會、文化資本換教育）。50 為目前預設換算率，數值愈高代表該類資本愈能「買到」對應資源，數值愈低代表該類資本愈難轉換。
-                  </p>
-                )}
-                {key === 'careerFamilyConflict' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    以下三組「抉擇強度」滑桿放大魚與熊掌不可兼得的後座力（事業與家庭、事業與健康、照顧與事業）。50 為目前預設強度，數值愈高代表玩家在這些兩難抉擇中，選擇某一邊要付出的代價愈大。
-                  </p>
-                )}
-                {key === 'careDistributionEquality' && (
-                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
-                    這個滑桿預設為 0（照顧責任由所有性別平均承擔，不改變現有平衡）。調高後，長照等「照顧型」事件的負面衝擊會更集中落在女性角色身上，男性角色承受的負面衝擊則相對變小，用來示範性別化的照顧分工如何轉譯為結構性落差。
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">📊 統計實驗室・成功／努力操作化</h2>
-        <div className="panel p-4 space-y-4">
-          <p className="text-xs text-inkFaint leading-relaxed">
-            「成功」與「努力」在社會科學裡都不是單一、無爭議的測量，同一個概念換一種操作化方式，看到的相關與迴歸係數也可能不同。這裡讓學生體驗「操作化選擇如何改變故事」。
-          </p>
-          <div>
-            <div className="text-sm text-ink mb-1.5">Success Operationalization（成功的操作化）</div>
-            <select value={settings.successOperationalization} onChange={(e) => updateSettings({ successOperationalization: e.target.value })}
-              className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
-              {SUCCESS_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
-            </select>
+      <div className="flex gap-1.5 mb-8 overflow-x-auto pb-1">
+        {TEACHER_STEPS.map((s, i) => (
+          <button key={s.key} onClick={() => setStep(s.key)}
+            className={'shrink-0 px-3 py-1.5 rounded-full text-xs font-mono border transition-colors whitespace-nowrap ' +
+              (s.key === step ? 'bg-brass border-brass text-[#191307]' : i < stepIndex ? 'bg-surface2 border-borderc text-inkDim hover:border-brass' : 'bg-surface2 border-borderc text-inkFaint hover:border-brass')}>
+            {s.title}
+          </button>
+        ))}
+      </div>
+
+      {step === 'presets' && (
+        <React.Fragment>
+          <section className="mb-8">
+            <h2 className="text-sm text-inkDim mb-3">即時社會預覽（Live Society Preview）</h2>
+            <div className="panel p-4 space-y-2">
+              {describeSociety(settings).map((line, i) => (
+                <p key={i} className="text-sm text-ink leading-relaxed">{line}</p>
+              ))}
+            </div>
+          </section>
+          <section className="mb-8">
+            <h2 className="text-sm text-inkDim mb-3">預設情境（不預設哪一個是「正確答案」）</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PRESET_ORDER.map((key) => (
+                <button key={key} onClick={() => applyPreset(key)} className="text-left panel hover:border-brass p-4 transition-colors">
+                  <div className="text-ink font-medium mb-1">{PRESETS[key].label}</div>
+                  <div className="text-xs text-inkFaint">{PRESETS[key].description}</div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </React.Fragment>
+      )}
+
+      {numericForStep.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-sm text-inkDim mb-3">{current.title} 設定</h2>
+          <div className="panel p-4 space-y-4">
+            {numericForStep.map(({ key, label }) => (
+              <NumericFieldRow key={key} fieldKey={key} label={label} value={settings[key]}
+                onChange={(e) => { const o = {}; o[key] = Number(e.target.value); updateSettings(o); }} />
+            ))}
           </div>
-          <div>
-            <div className="text-sm text-ink mb-1.5">Effort Operationalization（努力的操作化）</div>
-            <select value={settings.effortOperationalization} onChange={(e) => updateSettings({ effortOperationalization: e.target.value })}
-              className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
-              {EFFORT_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
-            </select>
+        </section>
+      )}
+
+      {step === 'statistics' && (
+        <section className="mb-8">
+          <h2 className="text-sm text-inkDim mb-3">📊 統計實驗室・成功／努力操作化</h2>
+          <div className="panel p-4 space-y-4">
+            <p className="text-xs text-inkFaint leading-relaxed">
+              「成功」與「努力」在社會科學裡都不是單一、無爭議的測量，同一個概念換一種操作化方式，看到的相關與迴歸係數也可能不同。這裡讓學生體驗「操作化選擇如何改變故事」。
+            </p>
+            <div>
+              <div className="text-sm text-ink mb-1.5">Success Operationalization（成功的操作化）</div>
+              <select value={settings.successOperationalization} onChange={(e) => updateSettings({ successOperationalization: e.target.value })}
+                className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
+                {SUCCESS_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
+              </select>
+            </div>
+            <div>
+              <div className="text-sm text-ink mb-1.5">Effort Operationalization（努力的操作化）</div>
+              <select value={settings.effortOperationalization} onChange={(e) => updateSettings({ effortOperationalization: e.target.value })}
+                className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
+                {EFFORT_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
+              </select>
+            </div>
           </div>
-        </div>
-      </section>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">教學功能開關</h2>
-        <div className="panel divide-y divide-borderc">
-          {TOGGLE_FIELDS.map(({ key, label }) => (
-            <label key={key} className="flex items-center justify-between px-4 py-3 cursor-pointer">
-              <span className="text-sm text-ink">{label}</span>
-              <input type="checkbox" checked={!!settings[key]} onChange={(e) => { const o = {}; o[key] = e.target.checked; updateSettings(o); }} className="w-4 h-4" />
-            </label>
-          ))}
-        </div>
-      </section>
-      <section className="mb-8">
-        <h2 className="text-sm text-inkDim mb-3">▶ 預測結果（Preview Simulation）</h2>
-        <PreviewSimulationPanel settings={settings} />
-      </section>
-      <button onClick={resetSettingsToDefault} className="btn-ghost px-5 py-2.5 text-sm">恢復預設</button>
+        </section>
+      )}
+
+      {toggleForStep.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-sm text-inkDim mb-3">{step === 'statistics' ? '教學功能開關' : '教學功能開關'}</h2>
+          <div className="panel divide-y divide-borderc">
+            {toggleForStep.map(({ key, label }) => (
+              <label key={key} className="flex items-center justify-between px-4 py-3 cursor-pointer">
+                <span className="text-sm text-ink">{label}</span>
+                <input type="checkbox" checked={!!settings[key]} onChange={(e) => { const o = {}; o[key] = e.target.checked; updateSettings(o); }} className="w-4 h-4" />
+              </label>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {step === 'preview' && (
+        <section className="mb-8">
+          <h2 className="text-sm text-inkDim mb-3">▶ 預測結果（Preview Simulation）</h2>
+          <PreviewSimulationPanel settings={settings} />
+          <button onClick={() => onStartExperiment && onStartExperiment()} className="btn-primary w-full mt-6 py-3.5">開始課堂實驗</button>
+        </section>
+      )}
+
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-borderc">
+        <button onClick={() => goStep(-1)} disabled={stepIndex === 0} className="btn-ghost px-4 py-2 text-sm disabled:opacity-30">‹ 上一步</button>
+        <button onClick={resetSettingsToDefault} className="text-xs text-inkFaint hover:text-ink transition-colors">恢復預設</button>
+        <button onClick={() => goStep(1)} disabled={stepIndex === TEACHER_STEPS.length - 1} className="btn-ghost px-4 py-2 text-sm disabled:opacity-30">下一步 ›</button>
+      </div>
     </div>
   );
 }
@@ -3041,7 +3142,7 @@ function App() {
   } else if (phase === 'howto') {
     content = <HowToScreen onBack={() => setPhase('home')} />;
   } else if (phase === 'teacher') {
-    content = <TeacherScreen settings={settings} updateSettings={updateSettings} applyPreset={applyPreset} resetSettingsToDefault={resetSettingsToDefault} onBack={() => setPhase('home')} />;
+    content = <TeacherScreen settings={settings} updateSettings={updateSettings} applyPreset={applyPreset} resetSettingsToDefault={resetSettingsToDefault} onBack={() => setPhase('home')} onStartExperiment={startNewGame} />;
   } else if (phase === 'analysis') {
     content = (
       <AnalysisScreen
