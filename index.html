@@ -511,6 +511,11 @@ function educationLabel(score) {
   const l = EDUCATION_LEVELS.find((l) => score >= l.min && score <= l.max);
   return l ? l.label : '高中／高職畢業';
 }
+function involvementLabel(score) {
+  if (score >= 70) return '陪伴充足';
+  if (score >= 40) return '中等陪伴';
+  return '陪伴有限';
+}
 function getEndingCopy(successScore) {
   if (successScore >= 80) return { headline: '功成名就的一生', description: '你在教育、職涯與財富上都取得了亮眼的成果，也累積了不小的社會影響力。' };
   if (successScore >= 60) return { headline: '穩健踏實的一生', description: '你的人生沒有大起大落，靠著持續的努力與一些機運，過上了穩定的生活。' };
@@ -841,7 +846,11 @@ function generateFamilyBackground(rng) {
   const occWeights = PARENT_OCCUPATIONS.map((_, i) => Math.max(1, 100 - Math.abs(i - ses / 5)));
   const fatherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
   const motherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
-  return { householdIncome, fatherEducation, motherEducation, fatherOccupation, motherOccupation, booksAtHome, housingSecurity, politicalConnections, professionalConnections, parentInPolitics, culturalCapital, socialCapital, economicCapital };
+  /* 幼年陪伴程度：與家庭社經地位只有「弱」相關（高薪工作有時反而更忙碌、更難陪伴），
+     保留較大的獨立隨機成分，用來呈現「陪伴不完全是用錢買的」這個現象，
+     跟經濟資本、文化資本是彼此獨立又互相影響的不同面向。 */
+  const parentalInvolvement = clamp(40 + ses * 0.2 + rng.normal(0, 22), 0, 100);
+  return { householdIncome, fatherEducation, motherEducation, fatherOccupation, motherOccupation, booksAtHome, housingSecurity, politicalConnections, professionalConnections, parentInPolitics, culturalCapital, socialCapital, economicCapital, parentalInvolvement };
 }
 function familySESIndex(family) {
   return clamp(family.economicCapital * 0.4 + family.culturalCapital * 0.3 + family.socialCapital * 0.2 + ((family.fatherEducation + family.motherEducation) / 2) * 0.1, 0, 100);
@@ -853,10 +862,18 @@ function createPlayer(rngSeed, isNPC) {
   const health = clamp(rng.normal(70, 12), 0, 100);
   const gender = rng.randomChoice(['female', 'male', 'other']);
   const birthplace = rng.randomChoice(BIRTHPLACES);
+  /* 教育分數不是每個人都從 0 開始的「預設值」：父母學歷、幼年陪伴程度與家庭文化資本，
+     會在出生時就先給予一段不算大、但確實存在的起跑點差距（約 0–35 分），
+     之後的人生事件仍會持續加總影響，但教育從一開始就不是齊頭式平等的。 */
+  const initialEducation = clamp(
+    family.fatherEducation * 0.12 + family.motherEducation * 0.12 +
+    family.parentalInvolvement * 0.15 + family.culturalCapital * 0.06 +
+    rng.normal(0, 6), 0, 35
+  );
   return {
     id: rngSeed, seed: rngSeed, age: 0, stage: 'birth', gender, birthplace, family,
     effort: 50, ability, health, happiness: clamp(rng.normal(65, 15), 0, 100),
-    education: 0, income: 0, wealth: family.economicCapital * 5000, careerPrestige: 0,
+    education: initialEducation, income: 0, wealth: family.economicCapital * 5000, careerPrestige: 0,
     culturalCapital: family.culturalCapital, socialCapital: family.socialCapital, economicCapital: family.economicCapital,
     luck: clamp(rng.normal(50, 15), 0, 100), opportunity: clamp(rng.normal(50, 15), 0, 100), interpersonal: clamp(rng.normal(55, 15), 0, 100),
     successScore: 0, occupation: '學生', history: [], politicalCapital: family.politicalConnections, isNPC: !!isNPC,
@@ -1302,7 +1319,7 @@ function StatusPanel({ player }) {
     <div className="panel p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm text-ink font-mono">{player.age} 歲 · {player.occupation}</div>
-        <div className="text-xs text-inkFaint">{educationLabel(player.education)}</div>
+        <div className="text-xs text-inkFaint">{LIFE_STAGE_LABELS[player.stage]}</div>
       </div>
       <StatBar label="健康" value={player.health} color="#6fa87a" />
       <StatBar label="快樂" value={player.happiness} color="#d4a84c" />
@@ -1666,11 +1683,23 @@ function GameScreen({ player, nextEvent, phase, choose, goToAttribution, submitA
       { name: '運氣', value: player.luck }, { name: '努力', value: player.effort }, { name: '能力', value: player.ability },
       { name: '人際', value: player.interpersonal },
     ];
+    const fam = player.family;
     return (
       <div className="min-h-screen px-4 py-12 max-w-2xl mx-auto">
         <Panel eyebrow="解密你的人生 · 檔案首度公開">
           <h2 className="font-display text-xl text-ink mb-1">🔓 解密你的人生</h2>
           <p className="text-sm text-inkFaint mb-6">以下為本模擬世界的生成機制，用來幫助理解不同因素如何共同影響人生結果，不代表真實世界存在完全相同的比例。</p>
+          <h3 className="text-sm text-ink font-medium mb-3">你出生時的家庭背景</h3>
+          <div className="grid grid-cols-2 gap-3 text-left mb-6">
+            <StatCell label="父親職業" value={fam.fatherOccupation} />
+            <StatCell label="母親職業" value={fam.motherOccupation} />
+            <StatCell label="父親學歷" value={educationLabel(fam.fatherEducation)} />
+            <StatCell label="母親學歷" value={educationLabel(fam.motherEducation)} />
+            <StatCell label="幼年陪伴程度" value={involvementLabel(fam.parentalInvolvement)} />
+            <StatCell label="家庭年收入（估計）" value={formatCurrency(fam.householdIncome)} />
+          </div>
+          <p className="text-xs text-inkFaint mb-6 leading-relaxed">你在遊戲一開始的「教育」分數，其實不是每個人都從 0 起跑：父母學歷、幼年陪伴程度與家庭文化資本，會先給你一段不算大、但確實存在的起跑點差距，之後才由你自己的選擇持續加總。</p>
+          <h3 className="text-sm text-ink font-medium mb-3">貫穿你整個人生的因素</h3>
           <BarChart data={hiddenFactors} />
           <button onClick={goToAnalysis} className="btn-primary w-full mt-6 py-3.5">進入社會科學解密</button>
         </Panel>
