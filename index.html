@@ -1125,9 +1125,12 @@ function tradeoffMultiplier(strength0to100) {
    去配的，但整輪玩下來（12 個人生階段 × 2 個事件）疊加起來，多數玩家與 NPC 的努力分數
    很快就會衝頂到 100、卡在天花板——散佈圖右側會擠成一條線，「努力」這個變項的變異
    幾乎消失，反而讓統計練習失真。EFFORT_DELTA_SCALE 把每一次努力變動統一縮小，
-   讓「持續選擇高努力選項」仍然能逼近 100（呈現「努力真的有累積效果」），但一般隨機
-   選擇的人生會落在中段、有足夠的分散，「刻意擺爛」的人生也會明顯偏低。 */
-const EFFORT_DELTA_SCALE = 0.4;
+   讓「持續選擇高努力選項」仍然能逼近高分（呈現「努力真的有累積效果」），但一般隨機
+   選擇的人生會落在中段、有足夠的分散，「刻意擺爛」的人生也會明顯偏低。
+   （教師實測回饋：0.4 仍會讓「每次都選認真選項」的玩家在一輪遊戲內就衝到 95–100，
+   感覺像是輕易就能「滿格」；調降到 0.2 後，即使全程都選最努力的選項，也只會落在
+   70–80 左右，努力的「累積感」與「稀缺感」才比較平衡，也讓散佈圖右側不再一次擠光。） */
+const EFFORT_DELTA_SCALE = 0.2;
 function applyEffect(player, effect, settings) {
   let delta = effect.stat === 'effort' ? effect.delta * EFFORT_DELTA_SCALE : effect.delta;
   if (effect.scaleBy) {
@@ -1866,15 +1869,94 @@ function StatusPanel({ player }) {
     </div>
   );
 }
-function PlayerCard({ player }) {
+/* 玩家自訂姓名／頭像 —— 完全在瀏覽器端以「姓名或 Seed 的雜湊值」決定色系與縮寫，
+   不需要、也不會上傳任何真人照片：考量到使用者多為學生（可能未成年），
+   自動生成頭像可以在「增加帶入感」與「不處理真人影像上傳的隱私風險」之間取得平衡。 */
+function hashStringToIndex(str, mod) {
+  let h = 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+  return h % mod;
+}
+const AVATAR_BG_PALETTE = ['#3a2f1c', '#1c3230', '#33211c', '#1f2b3a', '#2b2035', '#233522'];
+const AVATAR_ACCENT_PALETTE = ['#d4a84c', '#4ba3a3', '#c2694f', '#6fa87a', '#6b83c9', '#9b6bb5'];
+const AVATAR_SKIN_TONES = ['#f4d0ab', '#e8b587', '#c68a58', '#9c6b3f', '#7a4b28'];
+const AVATAR_HAIR_COLORS = ['#2b2320', '#4a2f1c', '#6b4423', '#8a5a2e', '#d4a84c', '#3f3f3f', '#1a1a1a'];
+/* 卡通素像頭像 —— 5 種髮型輪廓 × 5 種膚色 × 7 種髮色 × 6 種背景色 × 表情/眼鏡，
+   全部由姓名（或 Seed）的雜湊值決定，純 SVG 向量繪製，不依賴任何外部圖庫或
+   真人照片，符合「增加帶入感」但不處理未成年學生真人影像的原則。 */
+function hairShape(style, hairColor) {
+  switch (style) {
+    case 0: // 短髮／平頭
+      return <path d="M18 40 Q18 14 50 14 Q82 14 82 40 L82 30 Q82 20 50 20 Q18 20 18 30 Z" fill={hairColor} />;
+    case 1: // 旁分
+      return (
+        <g fill={hairColor}>
+          <path d="M16 38 Q14 12 50 10 Q88 12 84 40 L84 26 Q80 16 46 16 Q20 18 20 30 Z" />
+          <rect x="44" y="10" width="6" height="14" rx="3" />
+        </g>
+      );
+    case 2: // 長髮／馬尾
+      return (
+        <g fill={hairColor}>
+          <path d="M16 44 Q14 12 50 10 Q86 12 84 44 L84 60 Q78 44 78 40 L78 30 Q78 18 50 16 Q22 18 22 30 L22 40 Q22 44 16 60 Z" />
+          <circle cx="50" cy="9" r="6" />
+        </g>
+      );
+    case 3: // 捲髮
+      return (
+        <g fill={hairColor}>
+          {[18, 30, 42, 54, 66, 78].map((cx, i) => <circle key={i} cx={cx} cy={i % 2 === 0 ? 18 : 14} r="9" />)}
+          <rect x="18" y="14" width="64" height="16" rx="8" />
+        </g>
+      );
+    default: // 光頭／極短
+      return <path d="M20 30 Q20 16 50 15 Q80 16 80 30 L80 24 Q78 17 50 17 Q22 17 20 24 Z" fill={hairColor} opacity="0.85" />;
+  }
+}
+function Avatar({ name, seed, size }) {
+  const px = size || 40;
+  const trimmed = (name || '').trim();
+  const key = trimmed || ('seed-' + (seed != null ? seed : '0'));
+  const bg = AVATAR_BG_PALETTE[hashStringToIndex(key + '::bg', AVATAR_BG_PALETTE.length)];
+  const accent = AVATAR_ACCENT_PALETTE[hashStringToIndex(key + '::accent', AVATAR_ACCENT_PALETTE.length)];
+  const skin = AVATAR_SKIN_TONES[hashStringToIndex(key + '::skin', AVATAR_SKIN_TONES.length)];
+  const hairColor = AVATAR_HAIR_COLORS[hashStringToIndex(key + '::hair', AVATAR_HAIR_COLORS.length)];
+  const hairStyle = hashStringToIndex(key + '::style', 5);
+  const mouthType = hashStringToIndex(key + '::mouth', 3);
+  const hasGlasses = hashStringToIndex(key + '::glasses', 10) < 3;
+  const mouthPath = mouthType === 0 ? 'M40 66 Q50 74 60 66' : mouthType === 1 ? 'M42 67 L58 67' : 'M40 65 Q50 70 60 65 Q50 62 40 65';
+  return (
+    <div className="rounded-full overflow-hidden shrink-0" style={{ width: px, height: px, border: '1.5px solid ' + accent }} aria-hidden="true">
+      <svg viewBox="0 0 100 100" width={px} height={px}>
+        <circle cx="50" cy="50" r="50" fill={bg} />
+        <circle cx="50" cy="56" r="26" fill={skin} />
+        <path d="M24 58 Q22 82 50 88 Q78 82 76 58 Q76 40 50 40 Q24 40 24 58 Z" fill={skin} />
+        <circle cx="40" cy="54" r="3" fill="#2b2320" />
+        <circle cx="60" cy="54" r="3" fill="#2b2320" />
+        {hasGlasses && (
+          <g stroke={accent} strokeWidth="2.4" fill="none">
+            <circle cx="40" cy="54" r="8" /><circle cx="60" cy="54" r="8" /><line x1="48" y1="54" x2="52" y2="54" />
+          </g>
+        )}
+        <path d={mouthPath} stroke="#8a4a3a" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        {hairShape(hairStyle, hairColor)}
+      </svg>
+    </div>
+  );
+}
+function PlayerCard({ player, playerName }) {
   const genderLabel = player.gender === 'male' ? '男性' : player.gender === 'female' ? '女性' : '其他';
   return (
-    <div className="panel p-4 flex items-center justify-between">
-      <div>
-        <div className="text-sm text-ink font-medium">{player.birthplace} · {genderLabel}</div>
-        <div className="text-xs text-inkFaint mt-0.5">{LIFE_STAGE_LABELS[player.stage]} · {player.age} 歲</div>
+    <div className="panel p-4 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <Avatar name={playerName} seed={player.seed} size={40} />
+        <div className="min-w-0">
+          <div className="text-sm text-ink font-medium truncate">{playerName ? playerName : player.birthplace + ' · ' + genderLabel}</div>
+          <div className="text-xs text-inkFaint mt-0.5">{LIFE_STAGE_LABELS[player.stage]} · {player.age} 歲</div>
+        </div>
       </div>
-      <div className="text-xs text-inkFaint font-mono">SEED {player.seed}</div>
+      <div className="text-xs text-inkFaint font-mono shrink-0">SEED {player.seed}</div>
     </div>
   );
 }
@@ -1945,12 +2027,15 @@ function StatCell({ label, value }) {
     </div>
   );
 }
-function EndingCard({ player }) {
+function EndingCard({ player, playerName }) {
   const ending = getEndingCopy(player.successScore);
   return (
     <div className="panel p-8 text-center fade-up">
       <div className="eyebrow mb-2">人生履歷 · 結案</div>
-      <div className="text-sm text-inkFaint mb-2">你退休了</div>
+      <div className="flex flex-col items-center gap-2 mb-2">
+        <Avatar name={playerName} seed={player.seed} size={56} />
+        <div className="text-sm text-inkFaint">{playerName ? playerName + '，你退休了' : '你退休了'}</div>
+      </div>
       <h1 className="font-display text-2xl text-ink mb-1">{ending.headline}</h1>
       <p className="text-inkDim text-base mb-8">{ending.description}</p>
       <div className="grid grid-cols-2 gap-3 text-left">
@@ -2118,6 +2203,7 @@ function DisclaimerScreen({ onAck }) {
 function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }) {
   const [showSeedInput, setShowSeedInput] = useState(false);
   const [seedValue, setSeedValue] = useState('');
+  const [nameValue, setNameValue] = useState('');
   useEffect(() => {
     const urlSeed = getSeedFromUrl();
     if (urlSeed) { setSeedValue(urlSeed); setShowSeedInput(true); }
@@ -2135,14 +2221,20 @@ function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }
         <p>不努力一定不會成功？</p>
       </div>
       <div className="flex flex-col gap-3 w-full max-w-xs">
-        <button onClick={() => onStart()} className="btn-primary w-full py-3.5">開始我的人生</button>
+        <div className="flex items-center gap-2.5 mb-1">
+          <Avatar name={nameValue} seed={seedValue || 'home-preview'} size={40} />
+          <input value={nameValue} onChange={(e) => setNameValue(e.target.value.slice(0, 12))} placeholder="幫這個人生取個名字（選填）"
+            className="flex-1 px-3 py-2.5 rounded-lg bg-surface2 border border-borderc text-ink text-sm text-left focus:outline-none focus:border-brass" />
+        </div>
+        <p className="text-xs text-inkFaint -mt-2 mb-1 text-left px-0.5">頭像會依姓名自動生成卡通素像，完全在你的瀏覽器裡完成，不會上傳任何照片。</p>
+        <button onClick={() => onStart(undefined, nameValue)} className="btn-primary w-full py-3.5">開始我的人生</button>
         {!showSeedInput ? (
           <button onClick={() => setShowSeedInput(true)} className="btn-ghost w-full py-3 text-sm">輸入 Seed</button>
         ) : (
           <div className="flex gap-2">
             <input value={seedValue} onChange={(e) => setSeedValue(e.target.value)} placeholder="例如：soc2026"
               className="flex-1 px-3 py-2.5 rounded-lg bg-surface2 border border-borderc text-ink text-sm focus:outline-none focus:border-brass font-mono" />
-            <button onClick={() => onStart(seedValue)} className="btn-primary px-4 py-2.5 text-sm">確定</button>
+            <button onClick={() => onStart(seedValue, nameValue)} className="btn-primary px-4 py-2.5 text-sm">確定</button>
           </div>
         )}
         {hasSave && <button onClick={onContinue} className="btn-ghost w-full py-3 text-sm">繼續上次人生</button>}
@@ -2455,7 +2547,7 @@ function PreviewSimulationPanel({ settings }) {
 /* ============================================================
    11. GAME SCREEN — playing / ending / attribution / reveal
    ============================================================ */
-function GameScreen({ player, nextEvent, phase, settings, choose, goToAttribution, submitAttribution, goToAnalysis }) {
+function GameScreen({ player, playerName, nextEvent, phase, settings, choose, goToAttribution, submitAttribution, goToAnalysis }) {
   const [lastNarrative, setLastNarrative] = useState(null);
   const lastEventIdRef = useRef(null);
   const [blindGuess, setBlindGuess] = useState(null);
@@ -2481,7 +2573,7 @@ function GameScreen({ player, nextEvent, phase, settings, choose, goToAttributio
       <div className="min-h-screen px-4 py-8 max-w-2xl mx-auto">
         <div className="mb-4"><LifeTimeline currentStage={player.stage} /></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-          <PlayerCard player={player} />
+          <PlayerCard player={player} playerName={playerName} />
           <StatusPanel player={player} />
         </div>
         {lastNarrative && (
@@ -2495,7 +2587,7 @@ function GameScreen({ player, nextEvent, phase, settings, choose, goToAttributio
   if (phase === 'ending' || (phase === 'playing' && !nextEvent)) {
     return (
       <div className="min-h-screen px-4 py-12 max-w-xl mx-auto">
-        <EndingCard player={player} />
+        <EndingCard player={player} playerName={playerName} />
         <button onClick={goToAttribution} className="btn-primary w-full mt-6 py-3.5">你認為自己為什麼成為現在的你？</button>
       </div>
     );
@@ -3071,10 +3163,11 @@ function App() {
   const [selfAttribution, setSelfAttribution] = useState(initial ? initial.selfAttribution || null : null);
   const [rebornConfidence, setRebornConfidence] = useState(initial ? initial.rebornConfidence || null : null);
   const [npcDataset, setNpcDataset] = useState(null);
+  const [playerName, setPlayerName] = useState(initial && typeof initial.playerName === 'string' ? initial.playerName : '');
 
   useEffect(() => {
-    writeSave({ seed, history, settings, phase, selfAttribution, rebornConfidence });
-  }, [seed, history, settings, phase, selfAttribution, rebornConfidence]);
+    writeSave({ seed, history, settings, phase, selfAttribution, rebornConfidence, playerName });
+  }, [seed, history, settings, phase, selfAttribution, rebornConfidence, playerName]);
 
   const session = useMemo(() => {
     if (!seed) return { player: null, nextEvent: null, done: false };
@@ -3091,7 +3184,7 @@ function App() {
     }
   }, [phase, npcDataset, session.player, seed, settings]);
 
-  const startNewGame = useCallback((seedInput) => {
+  const startNewGame = useCallback((seedInput, nameInput) => {
     const s = seedInput && seedInput.trim().length > 0 ? seedInput.trim() : randomSeed();
     setSeed(s);
     setHistory([]);
@@ -3099,6 +3192,7 @@ function App() {
     setSelfAttribution(null);
     setRebornConfidence(null);
     setNpcDataset(null);
+    if (typeof nameInput === 'string') setPlayerName(nameInput.trim().slice(0, 12));
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('seed', s);
@@ -3145,6 +3239,7 @@ function App() {
     setSelfAttribution(null);
     setRebornConfidence(null);
     setNpcDataset(null);
+    setPlayerName('');
   }, []);
 
   const hasSave = !!seed && history.length > 0;
@@ -3170,7 +3265,7 @@ function App() {
   } else {
     content = (
       <GameScreen
-        player={session.player} nextEvent={session.nextEvent} phase={phase} settings={settings}
+        player={session.player} playerName={playerName} nextEvent={session.nextEvent} phase={phase} settings={settings}
         choose={choose} goToAttribution={goToAttribution} submitAttribution={submitAttribution} goToAnalysis={goToAnalysis}
       />
     );
