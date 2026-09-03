@@ -447,6 +447,44 @@ const PARENT_IN_POLITICS_BASE_PROBABILITY = 0.05;
 
 const PARENT_OCCUPATIONS = ['工廠作業員', '計程車司機', '小吃店老闆', '便利商店店員', '中小企業職員', '公務人員', '國小教師', '護理師', '工程師', '會計師', '律師', '醫師', '大學教授', '中小企業主', '上市公司主管', '農漁民', '自營商', '幕僚', '黨工', '地方民代'];
 const PLAYER_OCCUPATIONS = ['工程師', '教師', '護理師', '公務人員', '業務員', '自營商', '會計師', '律師', '醫師', '大學教授', '研究員', '設計師', '內容創作者', '社工', '廚師', '幕僚', '黨工', '地方民代', '公司主管', '創業者'];
+/* 職業薪資／退休金模型 —— 相對倍率參考行政院主計總處統計與 104 人力銀行《2025 各行業薪資排名》
+   （電子資訊、金融保險等產業年薪明顯高於服務業、社工等，此處以相對倍率呈現，非即時薪資數字）。
+   sector: 'public' 代表享有公部門式的退休制度（月退俸），'private' 則對應勞保＋勞退新制的較低替代率。 */
+const OCCUPATION_PROFILES = {
+  '工程師': { incomeMultiplier: 1.5, sector: 'private' },
+  '教師': { incomeMultiplier: 1.05, sector: 'public' },
+  '護理師': { incomeMultiplier: 1.05, sector: 'private' },
+  '公務人員': { incomeMultiplier: 1.0, sector: 'public' },
+  '業務員': { incomeMultiplier: 0.95, sector: 'private' },
+  '自營商': { incomeMultiplier: 0.9, sector: 'private' },
+  '會計師': { incomeMultiplier: 1.3, sector: 'private' },
+  '律師': { incomeMultiplier: 1.6, sector: 'private' },
+  '醫師': { incomeMultiplier: 2.2, sector: 'private' },
+  '大學教授': { incomeMultiplier: 1.4, sector: 'public' },
+  '研究員': { incomeMultiplier: 1.3, sector: 'public' },
+  '設計師': { incomeMultiplier: 0.9, sector: 'private' },
+  '內容創作者': { incomeMultiplier: 0.85, sector: 'private' },
+  '社工': { incomeMultiplier: 0.72, sector: 'private' },
+  '廚師': { incomeMultiplier: 0.78, sector: 'private' },
+  '幕僚': { incomeMultiplier: 0.9, sector: 'private' },
+  '黨工': { incomeMultiplier: 0.85, sector: 'private' },
+  '地方民代': { incomeMultiplier: 1.1, sector: 'private' },
+  '公司主管': { incomeMultiplier: 1.6, sector: 'private' },
+  '創業者': { incomeMultiplier: 1.2, sector: 'private' },
+};
+const DEFAULT_OCCUPATION_PROFILE = { incomeMultiplier: 1, sector: 'private' };
+/* 大學科系選擇 —— 影響「比較可能從事的職業」，而非直接決定職業；
+   仍會保留一定機率跨領域就業，呈現現實中科系與職業並非一對一對應的現象。 */
+const MAJOR_PROFILES = {
+  major_cs_eng: { label: '資訊工程／電機工程', likelyOccupations: ['工程師', '研究員', '公司主管', '創業者'] },
+  major_business: { label: '商管／財務金融', likelyOccupations: ['業務員', '會計師', '公司主管', '創業者', '自營商'] },
+  major_medical: { label: '醫護／醫學', likelyOccupations: ['醫師', '護理師', '研究員'] },
+  major_education: { label: '教育學程', likelyOccupations: ['教師', '公務人員', '研究員'] },
+  major_humanities: { label: '人文社會／社會科學', likelyOccupations: ['社工', '內容創作者', '幕僚', '黨工', '地方民代', '公務人員'] },
+  major_law_admin: { label: '法律／公共行政', likelyOccupations: ['律師', '公務人員', '幕僚', '地方民代'] },
+  major_design_arts: { label: '設計／藝術', likelyOccupations: ['設計師', '內容創作者', '自營商'] },
+  skip_college: { label: '未就讀大學，高中畢業後直接就業', likelyOccupations: ['廚師', '自營商', '業務員', '工程師', '設計師'] },
+};
 const BIRTHPLACES = ['台北市', '新北市', '桃園市', '台中市', '台南市', '高雄市', '新竹縣市', '苗栗縣', '彰化縣', '雲林縣', '嘉義縣市', '屏東縣', '宜蘭縣', '花蓮縣', '台東縣', '南投縣'];
 const EDUCATION_LEVELS = [{ min: 0, max: 20, label: '國中肄業／畢業' }, { min: 20, max: 40, label: '高中／高職畢業' }, { min: 40, max: 55, label: '專科畢業' }, { min: 55, max: 75, label: '大學畢業' }, { min: 75, max: 90, label: '碩士' }, { min: 90, max: 100, label: '博士' }];
 function educationLabel(score) {
@@ -474,38 +512,45 @@ const CORE_EVENTS = [
         ],
         hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6 }] },
       { id: 'play_instead', text: '先出去玩，明天早起再讀', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'education', delta: 1 }] },
+      { id: 'give_up_studying', text: '乾脆放棄，先打電動紓壓', visibleEffects: [{ stat: 'effort', delta: -6 }], hiddenEffects: [{ stat: 'stress', delta: 3 }, { stat: 'education', delta: -2 }] },
     ] },
   { id: 'event_02_first_big_exam', stage: 'elementary', title: '第一次大考', description: '學校即將舉行第一次重要的段考，全班都在準備。', tags: ['core'], weight: 1,
     choices: [
       { id: 'prepare', text: '按照自己的步調準備', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'stress', delta: 4 }] },
       { id: 'ask_help', text: '請家人或同學幫忙一起複習', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4 }, { stat: 'socialCapital', delta: 2 }] },
+      { id: 'panic_and_skip', text: '考前太緊張，乾脆隨便應付', visibleEffects: [{ stat: 'stress', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: -3 }] },
     ] },
   { id: 'event_03_teacher_says', stage: 'middleSchool', title: '老師說', description: '老師在班會上說：「只要肯努力，每個人都有機會考上好大學。」', tags: ['core'], weight: 1,
     choices: [
       { id: 'work_harder', text: '我要更加努力', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'education', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '你下定決心更加努力，但之後不同背景的同學可能得到不同的資源與機會。' },
       { id: 'stay_steady', text: '維持原本的步調就好', visibleEffects: [{ stat: 'stress', delta: -3 }] },
+      { id: 'give_up_trying', text: '不相信這句話，乾脆擺爛', visibleEffects: [{ stat: 'effort', delta: -10 }], hiddenEffects: [{ stat: 'education', delta: -4 }] },
     ] },
   { id: 'event_04_parents_network', stage: 'highSchool', title: '父母的人脈', description: '暑假快到了，你在思考要不要找一份實習或打工。', tags: ['core'], weight: 1,
     conditions: [{ stat: 'family.socialCapital', op: 'gte', value: 60 }],
     choices: [
       { id: 'accept_referral', text: '接受爸爸朋友的公司實習機會', visibleEffects: [{ stat: 'opportunity', delta: 12 }], hiddenEffects: [{ stat: 'socialCapital', delta: 5 }, { stat: 'culturalCapital', delta: 3 }] },
       { id: 'find_own', text: '自己去找機會', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'opportunity', delta: 4 }] },
+      { id: 'skip_both', text: '兩個機會都不要，暑假先好好休息', visibleEffects: [{ stat: 'happiness', delta: 6 }], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
     ] },
   { id: 'event_05_family_crisis', stage: 'middleSchool', title: '家庭的難關', description: '家裡最近不太平靜：可能是父母工作變動、家人生病，或是需要搬家。', tags: ['core', 'family-crisis'], weight: 1,
     choices: [
       { id: 'keep_trying', text: '繼續努力面對課業', visibleEffects: [{ stat: 'effort', delta: 10 }, { stat: 'stress', delta: 12 }, { stat: 'health', delta: -4 }] },
       { id: 'take_time', text: '先花時間陪伴家人、處理家裡的事', visibleEffects: [{ stat: 'stress', delta: 6 }, { stat: 'socialCapital', delta: 3 }] },
+      { id: 'avoid_crisis', text: '選擇逃避，把自己關起來', visibleEffects: [{ stat: 'happiness', delta: -6 }], hiddenEffects: [{ stat: 'stress', delta: 10 }, { stat: 'socialCapital', delta: -2 }] },
     ] },
   { id: 'event_06_college_application', stage: 'highSchool', title: '大學申請', description: '申請表要求你：「請描述你的國際經驗與課外活動。」', tags: ['core'], weight: 1,
     choices: [
       { id: 'write_honestly', text: '如實描述自己目前擁有的經驗', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'opportunity', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '不同背景的你，履歷上會出現不同的出國經驗、社團、比賽、打工或家庭照顧經歷 — 這些都會自然地影響申請結果。' },
       { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。' },
+      { id: 'rush_application', text: '隨便寫一寫交差，不想花太多心力', visibleEffects: [{ stat: 'effort', delta: -4 }], hiddenEffects: [{ stat: 'opportunity', delta: -4 }, { stat: 'education', delta: -2 }] },
     ] },
   { id: 'event_07_art_competition', stage: 'middleSchool', title: '全國學生繪畫比賽', description: '你參加了一場虛構的「全國學生繪畫比賽」。你的藝術能力很不錯，另一位參賽者能力略遜於你，但對方的家庭更熟悉比賽規則、能取得專業指導，也更懂得如何包裝作品理念。', tags: ['core'], weight: 1,
     conditions: [{ stat: 'ability', op: 'gte', value: 55 }],
     choices: [
       { id: 'submit_own_style', text: '用自己的方式完成作品，全力以赴', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'happiness', delta: 4 }, { stat: 'opportunity', delta: 3, scaleBy: 'culturalCapital', scaleFactor: 0.5 }], resultNarrative: '最後對方獲獎了。你可以自己判斷：這中間有能力、有資源、也有評價標準與制度的共同作用。' },
       { id: 'seek_guidance', text: '想辦法找人請教比賽的訣竅', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }] },
+      { id: 'quit_competition', text: '覺得不公平，直接放棄比賽', visibleEffects: [{ stat: 'effort', delta: -8 }], hiddenEffects: [{ stat: 'happiness', delta: -3 }, { stat: 'opportunity', delta: -4 }] },
     ] },
   { id: 'event_08_job_hunting', stage: 'collegeOrWork', title: '求職', description: '你正在準備履歷，投遞第一份正式工作。', tags: ['core'], weight: 1,
     choices: [
@@ -523,41 +568,49 @@ const CORE_EVENTS = [
       { id: 'grow_up', text: '在家人親自陪伴下慢慢長大，常有人讀故事書給你聽', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'health', delta: 2 }] },
       { id: 'busy_household', text: '家裡忙於生計，你大多時候自己打發時間', visibleEffects: [{ stat: 'happiness', delta: 1 }], hiddenEffects: [{ stat: 'stress', delta: 2 }],
         resultNarrative: '幼兒期能得到多少陪伴與刺激，往往跟家庭當時的經濟與時間餘裕有關，而不是嬰幼兒自己能決定的事。' },
+      { id: 'frequent_illness', text: '身體比較虛弱，家人常帶你四處求醫', visibleEffects: [{ stat: 'health', delta: -4 }], hiddenEffects: [{ stat: 'stress', delta: 2 }, { stat: 'culturalCapital', delta: 1 }] },
     ] },
   { id: 'event_24_first_job_friction', stage: 'earlyCareer', title: '第一份工作的磨合', description: '進入職場後，你發現理想與現實有落差，主管交辦的任務也不總是你熟悉的。', tags: ['core'], weight: 1,
     choices: [
       { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4 }, { stat: 'stress', delta: 6 }] },
       { id: 'find_balance', text: '先求穩定，把生活步調顧好', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'stress', delta: -4 }] },
+      { id: 'quit_abruptly', text: '受不了壓力，裸辭走人', visibleEffects: [{ stat: 'happiness', delta: 4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -6 }, { stat: 'stress', delta: -8 }] },
     ] },
   { id: 'event_27_cram_school', stage: 'middleSchool', title: '要不要去補習班', description: '班上不少同學都去補習，你也在猶豫要不要跟進。', tags: ['core'], weight: 1,
     choices: [
       { id: 'go_cram', text: '去補習班加強', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }], resultNarrative: '補習能不能負擔、能不能持續，跟家庭的經濟資本有很大關係。' },
       { id: 'self_study', text: '靠自己安排讀書計畫', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'education', delta: 4 }] },
+      { id: 'stop_caring', text: '完全不想讀書，得過且過', visibleEffects: [{ stat: 'effort', delta: -8 }], hiddenEffects: [{ stat: 'education', delta: -5 }] },
     ] },
   { id: 'event_28_exchange_or_work', stage: 'collegeOrWork', title: '交換學生，還是先打工賺錢', description: '學校釋出交換學生名額，但你也在想是不是該先打工存錢、累積經驗。', tags: ['core'], weight: 1,
     choices: [
       { id: 'apply_exchange', text: '申請交換學生', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'opportunity', delta: 4 }] },
       { id: 'work_part_time', text: '先打工，累積工作經驗與收入', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'economicCapital', delta: 2 }, { stat: 'socialCapital', delta: 2 }] },
+      { id: 'neither_apply', text: '兩個都沒申請，維持原本生活步調', visibleEffects: [], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
     ] },
   { id: 'event_29_recognition', stage: 'earlyCareer', title: '被看見，還是被忽略', description: '一項專案完成後，功勞歸屬變得有點模糊。', tags: ['core'], weight: 1,
     choices: [
       { id: 'speak_up', text: '主動跟主管說明自己的貢獻', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 6, scaleBy: 'socialCapital', scaleFactor: 0.5 }] },
       { id: 'stay_quiet', text: '相信努力遲早會被看到', visibleEffects: [{ stat: 'stress', delta: -2 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 2 }] },
+      { id: 'overclaim_credit', text: '在同事面前誇大自己的貢獻', visibleEffects: [{ stat: 'stress', delta: 3 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 4 }, { stat: 'socialCapital', delta: -5 }] },
     ] },
   { id: 'event_30_health_check', stage: 'midlife', title: '健康檢查的紅字', description: '例行健檢報告出現幾項紅字，醫生建議你調整作息。', tags: ['core'], weight: 1,
     choices: [
       { id: 'adjust_lifestyle', text: '認真調整作息與運動習慣', visibleEffects: [{ stat: 'health', delta: 10 }], hiddenEffects: [{ stat: 'stress', delta: -4 }] },
       { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8 }, { stat: 'stress', delta: 5 }] },
+      { id: 'ignore_report', text: '乾脆不理會健檢報告', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -12 }, { stat: 'stress', delta: 2 }] },
     ] },
   { id: 'event_25_late_life_choice', stage: 'lateLife', title: '退休前的抉擇', description: '再過幾年就要退休了，你在想要不要拚最後一段職涯高峰，還是把重心放回家庭與健康。', tags: ['core'], weight: 1,
     choices: [
       { id: 'push_career', text: '再拚一波，爭取最後的升遷機會', visibleEffects: [{ stat: 'effort', delta: 8 }, { stat: 'careerPrestige', delta: 6 }], hiddenEffects: [{ stat: 'health', delta: -5 }, { stat: 'stress', delta: 6 }] },
       { id: 'focus_family', text: '把時間留給家人與自己的健康', visibleEffects: [{ stat: 'happiness', delta: 8 }, { stat: 'health', delta: 5 }] },
+      { id: 'try_both_poorly', text: '兩頭都想兼顧，結果兩邊都沒顧好', visibleEffects: [{ stat: 'happiness', delta: -3 }], hiddenEffects: [{ stat: 'stress', delta: 10 }, { stat: 'health', delta: -4 }, { stat: 'careerPrestige', delta: -2 }] },
     ] },
   { id: 'event_26_retirement', stage: 'retirement', title: '退休生活', description: '你正式退休了。回顧這一路，你會怎麼安排接下來的生活？', tags: ['core'], weight: 1,
     choices: [
       { id: 'stay_active', text: '參與社區活動、持續學習新事物', visibleEffects: [{ stat: 'happiness', delta: 8 }, { stat: 'health', delta: 4 }], hiddenEffects: [{ stat: 'socialCapital', delta: 3 }] },
       { id: 'quiet_life', text: '享受安靜、規律的生活', visibleEffects: [{ stat: 'happiness', delta: 6 }, { stat: 'stress', delta: -6 }] },
+      { id: 'retirement_loss', text: '突然閒下來，反而感到失落、缺乏生活重心', visibleEffects: [{ stat: 'happiness', delta: -8 }], hiddenEffects: [{ stat: 'stress', delta: 4 }] },
     ] },
 ];
 
@@ -567,6 +620,7 @@ const TIME_RELEVANT_EVENTS = [
       { id: 'learn_new_skills', text: '自費上課學新技能', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'education', delta: 8, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'opportunity', delta: 4, scaleBy: 'culturalCapital', scaleFactor: 0.5 }] },
       { id: 'wait_and_see', text: '觀望，先做好手上的事', visibleEffects: [{ stat: 'opportunity', delta: -5 }],
         narrativeBranches: [{ condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '前同事私下介紹了一個新職缺給你。' }] },
+      { id: 'ignore_change', text: '完全不理會，覺得自己不會被取代', visibleEffects: [], hiddenEffects: [{ stat: 'opportunity', delta: -8 }, { stat: 'stress', delta: -3 }] },
     ] },
   { id: 'event_10_rent_or_buy', stage: 'youngAdultCareer', title: '房子，租還是買', description: '房東通知漲租金，你開始認真想「到底要不要買房」。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -576,65 +630,77 @@ const TIME_RELEVANT_EVENTS = [
           { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '完全靠自己存錢，這條路會走得比較久。' },
         ] },
       { id: 'rent_and_invest_self', text: '先租房，把錢拿去投資自己（進修／創業）', visibleEffects: [{ stat: 'education', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 4 }] },
+      { id: 'give_up_homeownership', text: '放棄買房計畫，把錢花在當下的生活品質', visibleEffects: [{ stat: 'happiness', delta: 6 }], hiddenEffects: [{ stat: 'economicCapital', delta: -2 }] },
     ] },
   { id: 'event_11_investment_scam', stage: 'midlife', title: '投資詐騙訊息', description: '你收到一則「保證高報酬」的投資邀請訊息，對方看起來像認識的朋友。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'try_small_amount', text: '小額嘗試', visibleEffects: [{ stat: 'wealth', delta: 30000 }], hiddenEffects: [{ stat: 'stress', delta: 6 }], probabilityModifiers: [{ stat: 'luck', weight: 0.15 }], resultNarrative: '結果依運氣而定：小機率獲利，較高機率損失一筆錢、也讓人更焦慮。' },
       { id: 'block_and_warn', text: '直接封鎖，並提醒身邊的人', visibleEffects: [{ stat: 'socialCapital', delta: 3 }] },
+      { id: 'go_all_in', text: '把身家積蓄全部投入，梭哈一把', visibleEffects: [{ stat: 'wealth', delta: -200000 }], hiddenEffects: [{ stat: 'stress', delta: 14 }], probabilityModifiers: [{ stat: 'luck', weight: 0.1 }], resultNarrative: '把全部身家壓上去的風險遠高於小額嘗試，多數情況下會造成嚴重損失。' },
     ] },
   { id: 'event_12_petition', stage: 'youngAdultCareer', title: '連署與罷免', description: '社區里長信箱塞滿了「社區公共設施爭議」連署書，鄰居問你要不要簽。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'research_first', text: '花時間了解議題後決定', visibleEffects: [{ stat: 'effort', delta: 5 }], hiddenEffects: [{ stat: 'socialCapital', delta: 2 }, { stat: 'opportunity', delta: 2 }] },
       { id: 'follow_neighbors', text: '直接跟著鄰居的意見簽', visibleEffects: [] },
+      { id: 'avoid_involvement', text: '完全不理會，兩邊都不想得罪', visibleEffects: [], hiddenEffects: [{ stat: 'socialCapital', delta: -2 }] },
     ] },
   { id: 'event_13_long_term_care', stage: 'midlife', title: '長照的重量', description: '家中長輩需要長期照護，你必須在「自己照顧」「申請長照資源」「請看護」之間做選擇。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'care_myself', text: '自己承擔照顧責任', visibleEffects: [{ stat: 'stress', delta: 14 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }, { stat: 'health', delta: -5 }] },
       { id: 'use_resources', text: '申請政府長照資源／聘請看護', visibleEffects: [{ stat: 'stress', delta: 6 }], hiddenEffects: [{ stat: 'health', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '經濟資本會影響能選擇的資源與品質，但公共資源與親屬支援仍能組合運用。' },
+      { id: 'quit_job_to_care', text: '壓力過大，乾脆辭職全職照顧', visibleEffects: [{ stat: 'stress', delta: -2 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -8 }, { stat: 'economicCapital', delta: -3 }], resultNarrative: '照顧責任常常迫使人退出職場，這也是許多中年勞動者職涯中斷的常見原因。' },
     ] },
   { id: 'event_14_low_birthrate', stage: 'collegeOrWork', title: '少子化與招生', description: '你申請的學校今年招生人數創新低，學校釋出更多獎學金與彈性名額搶學生。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'acknowledge', text: '把握這波獎學金與名額', visibleEffects: [{ stat: 'opportunity', delta: 6 }], resultNarrative: '制度環境本身也在變動，不是所有機會都來自個人努力。' },
       { id: 'skeptical', text: '覺得誘因不明確，維持原本的升學計畫', visibleEffects: [{ stat: 'effort', delta: 4 }] },
+      { id: 'exploit_loophole', text: '鑽營各種名額漏洞，投機取巧', visibleEffects: [{ stat: 'opportunity', delta: 3 }], hiddenEffects: [{ stat: 'socialCapital', delta: -3 }] },
     ] },
   { id: 'event_15_influencer_economy', stage: 'youngAdultCareer', title: '接案／網紅經濟', description: '你經營的社群帳號突然有一支影片爆紅。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'go_full_time', text: '全力投入內容創作，考慮辭職', visibleEffects: [{ stat: 'effort', delta: 12 }, { stat: 'income', delta: 80000 }], hiddenEffects: [{ stat: 'stress', delta: 8 }], probabilityModifiers: [{ stat: 'culturalCapital', weight: 0.1 }], resultNarrative: '收入波動會大幅提高，依運氣與能否持續產出、判讀趨勢而定。' },
       { id: 'keep_as_side', text: '當作副業，保留正職', visibleEffects: [{ stat: 'income', delta: 20000 }], hiddenEffects: [{ stat: 'stress', delta: 2 }] },
+      { id: 'ignore_trend', text: '不理會這波流量，維持原本步調', visibleEffects: [{ stat: 'stress', delta: -3 }] },
     ] },
   { id: 'event_16_chatgpt_homework', stage: 'highSchool', title: 'ChatGPT 作業風波', description: '老師發現班上有人用 AI 工具寫作業，宣布以後作業要「當堂手寫」。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'use_as_tool', text: '把 AI 當工具，用來理解觀念後自己重寫', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'ability', delta: 4 }, { stat: 'education', delta: 4 }] },
       { id: 'copy_paste', text: '直接複製貼上交差', visibleEffects: [{ stat: 'effort', delta: -4 }], hiddenEffects: [{ stat: 'ability', delta: -3 }] },
+      { id: 'refuse_adapt', text: '拒絕配合新規定，持續使用 AI 工具交作業', visibleEffects: [], hiddenEffects: [{ stat: 'ability', delta: -5 }, { stat: 'education', delta: -4 }], resultNarrative: '違反新規定被抓到，不只成績受影響，也失去老師的信任。' },
     ] },
   { id: 'event_17_military_service', stage: 'collegeOrWork', title: '兵役／替代役與人生時程', description: '你必須安排一段時間服兵役或替代役，這會讓進入職場或升學的時間往後延。', tags: ['time-relevant'], weight: 1,
     conditions: [{ stat: 'gender', op: 'eq', value: 'male' }],
     choices: [
       { id: 'use_time_well', text: '利用服役期間準備考試、學技能', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 3 }] },
       { id: 'just_get_through', text: '把這段時間平安度過就好', visibleEffects: [{ stat: 'opportunity', delta: -3 }], resultNarrative: '這是人生時程的結構性中斷，而不是你努力不夠。' },
+      { id: 'resent_service', text: '心不甘情不願，成天抱怨浪費時間', visibleEffects: [{ stat: 'stress', delta: 6 }], hiddenEffects: [{ stat: 'opportunity', delta: -2 }] },
     ] },
   { id: 'event_18_ai_transition', stage: 'careerTurning', title: 'AI 轉型與新興工作', description: '你所在的產業因為導入 AI 而快速轉型：一部分職務被自動化取代，同時也冒出「AI 工作流程設計」「資料標註與品管」「人機協作教練」等新職缺。公司徵求願意轉型的員工，優先錄取「懂業務、又願意學 AI 工具」的人。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'join_reskilling', text: '報名內部轉職訓練，往新興職缺移動', visibleEffects: [{ stat: 'education', delta: 6 }, { stat: 'opportunity', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'economicCapital', scaleFactor: 0.5 }],
         narrativeBranches: [{ condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '你比較早得知哪些新興職缺其實搶手的內部消息。' }] },
       { id: 'stay_put', text: '留在原本的崗位，觀望情勢', visibleEffects: [{ stat: 'stress', delta: -4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -3 }] },
+      { id: 'resist_change', text: '抗拒轉型，堅持用舊方法工作', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8 }, { stat: 'opportunity', delta: -5 }] },
     ] },
   { id: 'event_19_going_abroad', stage: 'youngAdultCareer', title: '出走潮', description: '朋友一個個出國工作或打工度假，你也在猶豫要不要離開。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'go_abroad', text: '出國闖蕩', visibleEffects: [{ stat: 'income', delta: 15000 }, { stat: 'culturalCapital', delta: 5 }], hiddenEffects: [{ stat: 'socialCapital', delta: -4 }, { stat: 'stress', delta: 5 }] },
       { id: 'stay_local', text: '留在原地深耕', visibleEffects: [{ stat: 'socialCapital', delta: 5 }] },
+      { id: 'abroad_struggle', text: '倉促出國，卻因準備不足而處處碰壁', visibleEffects: [{ stat: 'stress', delta: 10 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 2 }, { stat: 'economicCapital', delta: -3 }] },
     ] },
   { id: 'event_20_cross_strait_tension', stage: 'midlife', title: '區域情勢升溫', description: '新聞持續報導區域情勢升溫，你所在的產業（如觀光、物流、科技供應鏈）受到影響，訂單或客源出現波動。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'acknowledge_macro', text: '調整工作節奏，觀察情勢變化', visibleEffects: [], hiddenEffects: [{ stat: 'income', delta: 8000, scaleBy: 'luck', scaleFactor: 0.6 }], resultNarrative: '這類總體環境的變化，通常不是個人努力可以完全抵銷或掌控的。' },
       { id: 'pivot_to_stable_sector', text: '主動轉往受影響較小的產業或客群', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'income', delta: 3000 }, { stat: 'stress', delta: 5 }],
         resultNarrative: '轉換跑道需要成本與時間，能不能順利轉型，也和原本累積的技能、人脈與資源有關。' },
+      { id: 'ignore_and_hope', text: '完全不調整，希望情勢自己好轉', visibleEffects: [], hiddenEffects: [{ stat: 'stress', delta: 6 }, { stat: 'income', delta: -5000 }] },
     ] },
   { id: 'event_21_exchange_program', stage: 'highSchool', title: '高中優異表現，出國研習一年', description: '因為在校成績或某項才能表現優異，學校推薦你申請一年期的海外交換研習計畫。名額有限，最後錄取與否還要看申請文件與面試。', tags: ['time-relevant'], weight: 1,
     conditions: [{ stat: 'ability', op: 'gte', value: 65 }],
     choices: [
       { id: 'apply_fully', text: '全力準備申請（讀書計畫、語言檢定、面試練習）', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6 }, { stat: 'socialCapital', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '錄取不一定代表家裡有錢 — 但錄取後能運用的額外資源，確實會受到家庭資源影響。' },
       { id: 'skip_it', text: '評估後決定不申請，把精力放在原本的升學規劃上', visibleEffects: [{ stat: 'effort', delta: 10 }] },
+      { id: 'apply_halfheartedly', text: '心不甘情不願地申請，準備得很敷衍', visibleEffects: [{ stat: 'stress', delta: 3 }], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
     ] },
   { id: 'event_22_politics', stage: 'youngAdultCareer', title: '從政這條路', description: '你有機會加入地方公職人員的團隊擔任幕僚，或是自己考慮投入基層公共事務，這條路如果走下去，未來也可能進一步參選民意代表。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -644,10 +710,28 @@ const TIME_RELEVANT_EVENTS = [
           { condition: { stat: 'family.parentInPolitics', op: 'eq', value: false }, narrative: '家裡沒有這方面的背景，你需要花更長的時間、靠自己在地經營慢慢累積。' },
         ] },
       { id: 'skip_politics', text: '選擇其他職業路徑，不投入政治', visibleEffects: [{ stat: 'effort', delta: 8 }] },
+      { id: 'reluctant_politics', text: '被拱著參與，但其實投入有限', visibleEffects: [{ stat: 'stress', delta: 6 }], hiddenEffects: [{ stat: 'politicalCapital', delta: 2 }] },
     ] },
 ];
 
+const MAJOR_SELECTION_EVENT_ID = 'event_47_major_selection';
 const STRUCTURE_EVENTS = [
+  { id: MAJOR_SELECTION_EVENT_ID, stage: 'collegeOrWork', title: '選填科系', description: '放榜了。你要選擇一個未來幾年要投入的科系領域 —— 這個選擇會大致影響你之後比較容易進入哪些行業，但不是唯一的決定因素。', tags: ['core', 'major-selection'], weight: 1,
+    choices: [
+      { id: 'major_cs_eng', text: '資訊工程／電機工程', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'education', delta: 8, scaleBy: 'culturalCapital', scaleFactor: 0.4 }, { stat: 'opportunity', delta: 5 }],
+        resultNarrative: '電子資訊相關產業近年平均薪資在各行業中名列前茅，但也代表課業與求職市場競爭都相對激烈。' },
+      { id: 'major_business', text: '商管／財務金融', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'education', delta: 6 }, { stat: 'socialCapital', delta: 3 }] },
+      { id: 'major_medical', text: '醫護／醫學', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'education', delta: 10, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'stress', delta: 6 }],
+        narrativeBranches: [{ condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '長年的補習與資源投入，讓你在醫科這條路上比較不吃力。' }],
+        resultNarrative: '醫學與護理系的訓練時間長、門檻高，但也是薪資相對穩定偏高的領域。' },
+      { id: 'major_education', text: '教育學程（未來走向教職）', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 6 }, { stat: 'socialCapital', delta: 2 }],
+        resultNarrative: '教職薪資不是最高的，但享有公部門式的退休保障，穩定性是它的主要優勢。' },
+      { id: 'major_humanities', text: '人文社會／社會科學', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 6 }, { stat: 'culturalCapital', delta: 3 }] },
+      { id: 'major_law_admin', text: '法律／公共行政', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'education', delta: 8 }, { stat: 'politicalCapital', delta: 2 }] },
+      { id: 'major_design_arts', text: '設計／藝術', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5 }, { stat: 'culturalCapital', delta: 4 }] },
+      { id: 'skip_college', text: '不繼續升學，高中畢業後直接投入職場', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: -5 }, { stat: 'opportunity', delta: 4 }],
+        resultNarrative: '直接就業能提早累積工作經驗與收入，但長期而言，正式學歷仍會影響一部分職涯機會的門檻。' },
+    ] },
   { id: 'event_39_typhoon_school', stage: 'elementary', title: '天災：颱風停班停課', description: '一場強颱來襲，學校連續停課三天，社區也傳出淹水災情。你要怎麼安排這幾天？', tags: ['core', 'disaster'], weight: 1,
     choices: [
       { id: 'study_at_home', text: '在家自己讀書、寫作業', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 3, scaleBy: 'culturalCapital', scaleFactor: 0.4 }] },
@@ -682,12 +766,14 @@ const STRUCTURE_EVENTS = [
       { id: 'use_school_resources', text: '善用學校現有的資源與課程', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 4, scaleBy: 'culturalCapital', scaleFactor: 0.3 }] },
       { id: 'add_private_resources', text: '家人額外幫你安排校外資源（才藝班、補習）', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'economicCapital', scaleFactor: 0.7 }],
         resultNarrative: '校內、校外資源加總起來，會讓不同家庭背景的學生，站在不太一樣的起跑點上。' },
+      { id: 'neither_resource', text: '學校跟家裡都沒有額外資源，只能靠自己摸索', visibleEffects: [], hiddenEffects: [{ stat: 'education', delta: -3 }] },
     ] },
   { id: 'event_43_healthcare_access', stage: 'lateLife', title: '城鄉醫療可近性', description: '你需要定期回診追蹤，但住家附近的醫療資源多寡，跟你住在都會區還是偏鄉地區有很大關係。', tags: ['core', 'regional-inequality'], weight: 1,
     choices: [
       { id: 'travel_to_hospital', text: '花時間往返大醫院回診', visibleEffects: [{ stat: 'stress', delta: 5 }], hiddenEffects: [{ stat: 'health', delta: 6 }] },
       { id: 'use_local_clinic', text: '就近使用在地診所或衛生所', visibleEffects: [{ stat: 'stress', delta: -2 }], hiddenEffects: [{ stat: 'health', delta: 3 }],
         resultNarrative: '醫療資源的地理分布不均，是許多偏鄉居民共同面對的現實課題。' },
+      { id: 'skip_checkup', text: '嫌麻煩，乾脆不去追蹤回診', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -8 }] },
     ] },
   { id: 'event_44_social_media_echo_chamber', stage: 'highSchool', title: '社群同溫層', description: '你在社群媒體上追蹤的帳號，多半跟你原本的立場與喜好相近，演算法也持續推送類似觀點的內容給你。', tags: ['core', 'social-network'], weight: 1,
     choices: [
@@ -710,6 +796,7 @@ const STRUCTURE_EVENTS = [
           { condition: { stat: 'socialCapital', op: 'lte', value: 35 }, narrative: '身邊可以求助的人不多，這段時間格外辛苦，大多只能靠自己想辦法。' },
         ] },
       { id: 'handle_alone', text: '獨自扛下所有的事，不想麻煩別人', visibleEffects: [{ stat: 'stress', delta: 10 }], hiddenEffects: [{ stat: 'health', delta: -5 }] },
+      { id: 'refuse_help_pride', text: '礙於面子，即使很需要也不願意開口求助', visibleEffects: [{ stat: 'stress', delta: 8 }], hiddenEffects: [{ stat: 'health', delta: -3 }] },
     ] },
 ];
 
@@ -801,6 +888,13 @@ function pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant) {
   const weights = candidates.map((e) => (e.weight != null ? e.weight : 1));
   return rng.weightedChoice(candidates, weights);
 }
+function pickStageEvent(pool, stage, indexInStage, player, rng, usedEventIds, enableTimeRelevant) {
+  if (stage === 'collegeOrWork' && indexInStage === 0 && !usedEventIds.has(MAJOR_SELECTION_EVENT_ID)) {
+    const forced = pool.find((e) => e.id === MAJOR_SELECTION_EVENT_ID);
+    if (forced) return forced;
+  }
+  return pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant);
+}
 function computeModifiedProbability(baseProbability, player, modifiers) {
   let p = baseProbability;
   (modifiers || []).forEach((mod) => {
@@ -849,13 +943,18 @@ function computeSuccessScore(inputs, settings, rng) {
   const raw = effortEffect + abilityEffect + educationEffect + economicEffect + culturalEffect + socialEffect + opportunityEffect + luckEffect + interaction + randomError;
   return clamp(raw, 0, 100);
 }
-function deriveFinalOutcomes(player) {
+function deriveFinalOutcomes(player, occupationProfile) {
+  const profile = occupationProfile || DEFAULT_OCCUPATION_PROFILE;
   const incomeBase = 400000 + player.successScore * 45000 + player.education * 3000;
-  const income = Math.round(incomeBase / 1000) * 1000;
+  const income = Math.round((incomeBase * profile.incomeMultiplier) / 1000) * 1000;
   const wealthBase = income * 6 + player.family.economicCapital * 60000 + player.successScore * 30000;
   const wealth = Math.round(wealthBase / 10000) * 10000;
   const careerPrestige = clamp(player.successScore * 0.6 + player.education * 0.3 + player.socialCapital * 0.1);
-  return { income, wealth, careerPrestige };
+  /* 退休金：公部門（教師／公務人員／教授／研究員）享較高所得替代率的月退俸；
+     私部門則以勞保老年年金＋勞退新制估算，替代率明顯較低 —— 呈現台灣現行退休制度的雙軌落差。 */
+  const pensionReplacementRate = profile.sector === 'public' ? 0.68 : 0.35;
+  const pensionMonthly = Math.round(((income / 12) * pensionReplacementRate) / 1000) * 1000;
+  return { income, wealth, careerPrestige, pensionMonthly };
 }
 function finalizePlayer(player, settings, rng) {
   const successScore = computeSuccessScore({
@@ -864,13 +963,22 @@ function finalizePlayer(player, settings, rng) {
     socialCapital: player.socialCapital, luck: player.luck, opportunity: player.opportunity,
   }, settings, rng);
   const withSuccess = { ...player, successScore };
-  const { income, wealth, careerPrestige } = deriveFinalOutcomes(withSuccess);
   const politicsRecord = withSuccess.history.find((h) => h.eventId === 'event_22_politics');
   const wentIntoPolitics = politicsRecord && politicsRecord.choiceId === 'engage_politics';
-  const occupation = wentIntoPolitics
-    ? rng.randomChoice(['幕僚', '黨工', '地方民代'])
-    : rng.weightedChoice(PLAYER_OCCUPATIONS, PLAYER_OCCUPATIONS.map(() => rng.random() * successScore + 1));
-  return { ...withSuccess, income, wealth, careerPrestige, occupation };
+  const majorRecord = withSuccess.history.find((h) => h.eventId === MAJOR_SELECTION_EVENT_ID);
+  const majorProfile = majorRecord ? MAJOR_PROFILES[majorRecord.choiceId] : null;
+  let occupation;
+  if (wentIntoPolitics) {
+    occupation = rng.randomChoice(['幕僚', '黨工', '地方民代']);
+  } else {
+    const likely = majorProfile ? majorProfile.likelyOccupations : PLAYER_OCCUPATIONS;
+    const weights = PLAYER_OCCUPATIONS.map((occ) => (likely.includes(occ) ? 6 : 1) * (rng.random() * successScore + 1));
+    occupation = rng.weightedChoice(PLAYER_OCCUPATIONS, weights);
+  }
+  const occupationProfile = OCCUPATION_PROFILES[occupation] || DEFAULT_OCCUPATION_PROFILE;
+  const { income, wealth, careerPrestige, pensionMonthly } = deriveFinalOutcomes(withSuccess, occupationProfile);
+  const major = majorProfile ? majorProfile.label : '未選填特定科系';
+  return { ...withSuccess, income, wealth, careerPrestige, occupation, major, pensionMonthly, sector: occupationProfile.sector };
 }
 
 /* ============================================================
@@ -885,7 +993,7 @@ function replaySession(seed, settings, pool, history) {
   for (const stage of LIFE_STAGES) {
     player = { ...player, stage, age: LIFE_STAGE_START_AGE[stage] };
     for (let i = 0; i < EVENTS_PER_STAGE; i++) {
-      const event = pickEvent(pool, stage, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
+      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
       if (!event) break;
       usedEventIds.add(event.id);
       if (historyIndex < history.length) {
@@ -911,7 +1019,7 @@ function simulateFullLife(options) {
   for (const stage of LIFE_STAGES) {
     player = { ...player, stage, age: LIFE_STAGE_START_AGE[stage] };
     for (let i = 0; i < perStage; i++) {
-      const event = pickEvent(pool, stage, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
+      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
       if (!event) break;
       usedEventIds.add(event.id);
       const choice = selector(player, event, eventsRng);
@@ -1212,13 +1320,16 @@ function EndingCard({ player }) {
       <h1 className="font-display text-2xl text-ink mb-1">{ending.headline}</h1>
       <p className="text-inkDim text-sm mb-8">{ending.description}</p>
       <div className="grid grid-cols-2 gap-3 text-left">
+        <StatCell label="科系" value={player.major || '—'} />
         <StatCell label="職業" value={player.occupation} />
         <StatCell label="教育" value={educationLabel(player.education)} />
         <StatCell label="年收入" value={formatCurrency(player.income)} />
         <StatCell label="家庭資產" value={formatCurrency(player.wealth)} />
+        <StatCell label="退休金（每月）" value={formatCurrency(player.pensionMonthly || 0)} />
         <StatCell label="幸福" value={Math.round(player.happiness) + ' / 100'} />
         <StatCell label="社會影響力" value={Math.round(player.careerPrestige) + ' / 100'} />
       </div>
+      <p className="text-[11px] text-inkFaint mt-4 leading-relaxed">職業薪資倍率與退休金替代率為簡化模型，方向參考行政院主計總處統計與 104 人力銀行薪資排名，並非即時薪資數字。</p>
     </div>
   );
 }
@@ -1540,6 +1651,7 @@ const ONLINE_RESOURCES = [
   { label: '中央研究院人文社會科學研究中心調查研究專題中心（華人社會調查、學術調查資料庫）', url: 'https://srda.sinica.edu.tw/' },
   { label: '台灣社會變遷基本調查（Taiwan Social Change Survey）', url: 'https://tscs.sinica.edu.tw/' },
   { label: 'American Statistical Association — Statement on p-Values', url: 'https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf' },
+  { label: '104 職場力｜2025 各行業薪資排名（本遊戲職業薪資倍率的參考來源）', url: 'https://blog.104.com.tw/2025-taiwan-salary/' },
 ];
 function FinalScreen({ onRestart, onSameSeed, onNewLife }) {
   return (
@@ -1888,26 +2000,13 @@ function writeDisclaimerAck() {
   try { window.localStorage.setItem(DISCLAIMER_KEY, '1'); } catch (e) { /* ignore */ }
 }
 
-const VIEW_MODE_KEY = 'life-momentum-view-mode-v1';
-function loadViewMode() {
-  try {
-    const saved = window.localStorage.getItem(VIEW_MODE_KEY);
-    if (saved === 'desktop' || saved === 'mobile') return saved;
-  } catch (e) { /* ignore */ }
-  try { return window.innerWidth < 700 ? 'mobile' : 'desktop'; } catch (e) { return 'desktop'; }
-}
-function writeViewMode(mode) {
-  try { window.localStorage.setItem(VIEW_MODE_KEY, mode); } catch (e) { /* ignore */ }
-}
-function ViewModeShell({ mode, onChangeMode, children }) {
-  const isMobile = mode === 'mobile';
+/* 電腦／手機通用版：不提供手動切換，完全依螢幕寬度用 CSS 響應式呈現。
+   超寬螢幕（桌機）時把內容收在 max-w-5xl 置中，避免文字被拉得過寬；
+   窄螢幕（手機）時自然佔滿寬度，搭配前面針對 <640px / <480px 的字級放大媒體查詢。 */
+function ResponsiveShell({ children }) {
   return (
-    <div className="min-h-screen w-full flex justify-center" style={{ background: 'var(--bg)' }}>
-      <div className="fixed top-3 right-3 z-50 flex items-center gap-1 bg-surface2/95 backdrop-blur border border-borderc rounded-full p-1 shadow-lg">
-        <button onClick={() => onChangeMode('desktop')} className={'px-3 py-1.5 rounded-full text-xs font-mono whitespace-nowrap transition-colors ' + (!isMobile ? 'bg-brass text-[#191307]' : 'text-inkFaint hover:text-ink')}>💻 電腦模式</button>
-        <button onClick={() => onChangeMode('mobile')} className={'px-3 py-1.5 rounded-full text-xs font-mono whitespace-nowrap transition-colors ' + (isMobile ? 'bg-brass text-[#191307]' : 'text-inkFaint hover:text-ink')}>📱 手機模式</button>
-      </div>
-      <div className={isMobile ? 'w-full max-w-[430px] min-h-screen border-x border-borderStrong' : 'w-full min-h-screen'}>
+    <div className="min-h-screen w-full" style={{ background: 'var(--bg)' }}>
+      <div className="w-full max-w-5xl mx-auto min-h-screen">
         {children}
       </div>
     </div>
@@ -1932,8 +2031,6 @@ function randomSeed() {
 
 function App() {
   const [disclaimerAcked, setDisclaimerAcked] = useState(() => loadDisclaimerAck());
-  const [viewMode, setViewMode] = useState(() => loadViewMode());
-  useEffect(() => { writeViewMode(viewMode); }, [viewMode]);
   const initial = useMemo(() => loadSave(), []);
   const [seed, setSeed] = useState(initial && initial.seed ? initial.seed : null);
   const [history, setHistory] = useState(initial && Array.isArray(initial.history) ? initial.history : []);
@@ -2047,7 +2144,7 @@ function App() {
     );
   }
 
-  return <ViewModeShell mode={viewMode} onChangeMode={setViewMode}>{content}</ViewModeShell>;
+  return <ResponsiveShell>{content}</ResponsiveShell>;
 }
 
 const rootEl = document.getElementById('root');
