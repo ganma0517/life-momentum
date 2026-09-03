@@ -333,6 +333,14 @@ function sampleVariance(arr) {
   const m = mean(arr);
   return arr.reduce((s, x) => s + (x - m) * (x - m), 0) / (arr.length - 1);
 }
+function percentileRank(arr) {
+  const sorted = arr.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);
+  const out = new Array(arr.length);
+  sorted.forEach(([, originalIdx], rank) => {
+    out[originalIdx] = arr.length <= 1 ? 50 : (rank / (arr.length - 1)) * 100;
+  });
+  return out;
+}
 function correlation(x, y) {
   const mx = mean(x), my = mean(y);
   let num = 0, dx = 0, dy = 0;
@@ -477,6 +485,8 @@ const LIFE_STAGE_START_AGE = { birth: 0, toddler: 3, elementary: 7, middleSchool
 
 const DEFAULT_SETTINGS = {
   npcSampleSize: 999, alphaThreshold: 0.05,
+  /* 統計實驗室：成功／努力的操作化方式。預設值與原本的行為完全一致。 */
+  successOperationalization: 'default', effortOperationalization: 'default',
   effortCoefficient: 0.3, familySESCoefficient: 0.22, culturalCapitalCoefficient: 0.1, socialCapitalCoefficient: 0.1,
   luckCoefficient: 0.08, randomNoise: 0.12,
   /* 機會集合 Opportunity Set：0 = 機會分配極不平等（資源不夠的人，某些選項從一開始
@@ -507,6 +517,10 @@ const DEFAULT_SETTINGS = {
      讓同一輪模擬的所有人（玩家＋NPC）共同經歷同一個總體事件，但依個人條件承受不同幅度。 */
   enableRecessionShock: false, enableHousingBoomShock: false, enablePandemicShock: false, enableAutomationShock: false,
   enableOffshoringShock: false, enableEducationExpansionShock: false, enableWelfareReformShock: false,
+  /* 盲玩模式 Blind Mode：預設關閉。開啟後，學生在人生模擬過程中不會被告知目前套用
+     的是哪一種社會前提，直到結局揭密前，需要先猜一次「自己剛剛活在哪一種社會」，
+     才能看到實際設定，藉此比較學生的主觀感受與實際資料之間的落差。 */
+  blindMode: false,
   enableFamilyCrisis: true, enablePoliticalCapital: true, enableMultipleTestingLesson: true, enablePValueLesson: true, enableTimeRelevantEvents: true,
 };
 const SETTINGS_BOUNDS = {
@@ -1473,8 +1487,33 @@ function playerToDatasetRow(player) {
     economicCapital: player.economicCapital, culturalCapital: player.culturalCapital, socialCapital: player.socialCapital,
     education: player.education, luck: player.luck, success: player.successScore,
     income: player.income, wealth: player.wealth, careerPrestige: player.careerPrestige, happiness: player.happiness,
-    isPlayer: !player.isNPC,
+    health: player.health, isPlayer: !player.isNPC,
   };
+}
+/* 統計實驗室：成功／努力操作化 Operationalization。
+   遊戲底層只記錄一個統一的 effort 累積分數，因此「工作投入／學習投入／自律程度」等選項
+   並非各自獨立測量的變項，而是同一個潛在構念（努力）用不同的可觀察指標／組合方式呈現——
+   這正是社會科學「同一個概念，可以有不同操作化方式」的教學重點：換一種測量方式，
+   看到的相關與迴歸係數也可能跟著改變。財富（wealth）尺度與其他 0–100 分數不同，
+   所以在使用前會先在資料集內做百分位排名正規化。 */
+const SUCCESS_OPERATIONALIZATIONS = [
+  { key: 'default', label: '綜合成功分數（預設）', getValue: (d) => d.success },
+  { key: 'wealth', label: '財富（依樣本百分位排名正規化）', getValue: (d) => d.wealthPercentile },
+  { key: 'career', label: '職涯聲望', getValue: (d) => d.careerPrestige },
+  { key: 'happiness', label: '幸福感', getValue: (d) => d.happiness },
+  { key: 'health', label: '健康', getValue: (d) => d.health },
+  { key: 'custom', label: '自訂成功指數（財富＋職涯＋幸福＋健康平均）', getValue: (d) => (d.wealthPercentile + d.careerPrestige + d.happiness + d.health) / 4 },
+];
+const EFFORT_OPERATIONALIZATIONS = [
+  { key: 'default', label: '總投入時間（預設，effort 累積分數）', getValue: (d) => d.effort },
+  { key: 'work', label: '工作投入（effort 加權能力展現）', getValue: (d) => d.effort * 0.7 + d.ability * 0.3 },
+  { key: 'study', label: '學習投入（effort 加權教育投入）', getValue: (d) => d.effort * 0.7 + d.education * 0.3 },
+  { key: 'discipline', label: '自律程度（effort 加權情緒穩定度）', getValue: (d) => d.effort * 0.7 + d.happiness * 0.3 },
+  { key: 'custom', label: '自訂 Effort Index（effort、ability、education 平均）', getValue: (d) => (d.effort + d.ability + d.education) / 3 },
+];
+function resolveOperationalization(dataset, key, list) {
+  const def = list.find((item) => item.key === key) || list[0];
+  return { def, values: dataset.map(def.getValue) };
 }
 function generateNPCDataset(playerSeed, player, pool, settings) {
   const npcPlayers = [];
@@ -1491,9 +1530,9 @@ function generateNPCDataset(playerSeed, player, pool, settings) {
    Model 2：Success ~ Effort + FamilySES
    Model 3：Success ~ Effort + FamilySES + Education
    Model 4：Success ~ Effort + FamilySES + Education + SocialCapital */
-function buildControlVariableModels(dataset) {
-  const effort = dataset.map((d) => d.effort);
-  const success = dataset.map((d) => d.success);
+function buildControlVariableModels(dataset, effortValues, successValues) {
+  const effort = effortValues || dataset.map((d) => d.effort);
+  const success = successValues || dataset.map((d) => d.success);
   const familySES = dataset.map((d) => d.familySES);
   const education = dataset.map((d) => d.education);
   const socialCapital = dataset.map((d) => d.socialCapital);
@@ -1508,14 +1547,20 @@ function buildControlVariableModels(dataset) {
     { key: 'model4', label: 'Model 4', formula: 'Success ~ Effort + FamilySES + Education + SocialCapital', model: model4, varLabels: ['Effort', 'FamilySES', 'Education', 'SocialCapital'] },
   ];
 }
-function buildAnalysisBundle(dataset, seed) {
-  const effort = dataset.map((d) => d.effort);
-  const success = dataset.map((d) => d.success);
+function buildAnalysisBundle(dataset, seed, settings) {
+  const wealthPercentile = percentileRank(dataset.map((d) => d.wealth));
+  const datasetWithWealthPct = dataset.map((d, i) => ({ ...d, wealthPercentile: wealthPercentile[i] }));
+  const successKey = (settings && settings.successOperationalization) || 'default';
+  const effortKey = (settings && settings.effortOperationalization) || 'default';
+  const successOp = resolveOperationalization(datasetWithWealthPct, successKey, SUCCESS_OPERATIONALIZATIONS);
+  const effortOp = resolveOperationalization(datasetWithWealthPct, effortKey, EFFORT_OPERATIONALIZATIONS);
+  const effort = effortOp.values;
+  const success = successOp.values;
   const familySES = dataset.map((d) => d.familySES);
-  const scatterData = dataset.map((d) => ({ x: d.effort, y: d.success }));
+  const scatterData = effort.map((x, i) => ({ x, y: success[i] }));
   const model1 = simpleRegression(effort, success);
   const model2 = multipleLinearRegression(effort.map((e, i) => [e, familySES[i]]), success);
-  const controlVariableModels = buildControlVariableModels(dataset);
+  const controlVariableModels = buildControlVariableModels(dataset, effort, success);
   const rng = createRNG(seed + '::sampleSizeDemo');
   const indices = dataset.map((_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
@@ -1526,16 +1571,70 @@ function buildAnalysisBundle(dataset, seed) {
   const subsetIdx = indices.slice(0, sampleSize);
   const studyAReg = simpleRegression(subsetIdx.map((i) => effort[i]), subsetIdx.map((i) => success[i]));
   const studyBReg = model1;
+  /* 這一段刻意固定使用原始的六個結果變數（不隨 Success/Effort Operationalization 改變），
+     因為 P-hacking／multiple testing 示範的重點是「同一份努力資料，測試多個結果變數，
+     只挑顯著的來報告」，操作化選擇是另一個獨立要教的概念，兩者混在一起反而模糊教學重點。 */
+  const rawEffort = dataset.map((d) => d.effort);
   const outcomes = [
     { label: '收入', key: 'income' }, { label: '財富', key: 'wealth' }, { label: '幸福', key: 'happiness' },
     { label: '職業聲望', key: 'careerPrestige' }, { label: '教育', key: 'education' }, { label: '能力（作為對照組指標）', key: 'ability' },
   ];
   const section22Tests = outcomes.map(({ label, key }) => {
     const y = dataset.map((d) => d[key]);
-    const reg = simpleRegression(effort, y);
+    const reg = simpleRegression(rawEffort, y);
     return { label, pValue: reg.pValues[0], result: reg };
   });
-  return { scatterData, model1, model2, controlVariableModels, studyA: { ...studyAReg, n: sampleSize }, studyB: { ...studyBReg, n: dataset.length }, section22Tests };
+  return { scatterData, model1, model2, controlVariableModels, studyA: { ...studyAReg, n: sampleSize }, studyB: { ...studyBReg, n: dataset.length }, section22Tests, successOp, effortOp };
+}
+/* 預測結果 Preview Simulation：教師設定完成後，不進入正式遊戲，快速模擬一批 NPC
+   （只用來確認「這個社會的統計結構」，不含玩家本人），呈現社會流動率、收入不平等、
+   家庭背景／努力與成功的相關，以及健康與幸福的落差，並附上兩張簡易散佈圖。 */
+function runPreviewSimulation(settings, sampleSize) {
+  const previewSeed = 'preview::' + Math.random().toString(36).slice(2);
+  const npcs = [];
+  const n = sampleSize || 1000;
+  for (let i = 0; i < n; i++) {
+    npcs.push(simulateFullLife({ seed: previewSeed + '::npc::' + i, settings, pool: ALL_EVENTS, isNPC: true, cohortSeed: previewSeed }));
+  }
+  const rows = npcs.map(playerToDatasetRow);
+  const familySES = rows.map((r) => r.familySES);
+  const success = rows.map((r) => r.success);
+  const effort = rows.map((r) => r.effort);
+  const wealth = rows.map((r) => r.wealth);
+  const health = rows.map((r) => r.health);
+  const happiness = rows.map((r) => r.happiness);
+
+  const familySESPct = percentileRank(familySES);
+  const successPct = percentileRank(success);
+  const quartileOf = (p) => Math.min(3, Math.floor(p / 25));
+  let moved = 0;
+  familySESPct.forEach((p, i) => { if (quartileOf(p) !== quartileOf(successPct[i])) moved += 1; });
+  const mobilityRate = moved / rows.length;
+
+  const sortedWealth = [...wealth].sort((a, b) => a - b);
+  const percentileValue = (sorted, p) => sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * p)))];
+  const p10 = percentileValue(sortedWealth, 0.1);
+  const p90 = percentileValue(sortedWealth, 0.9);
+  const wealthRatio = p10 > 0 ? p90 / p10 : null;
+
+  const familySESSuccessCorr = correlation(familySES, success);
+  const effortSuccessCorr = correlation(effort, success);
+
+  const bottomIdx = familySESPct.map((p, i) => [p, i]).filter(([p]) => p < 25).map(([, i]) => i);
+  const topIdx = familySESPct.map((p, i) => [p, i]).filter(([p]) => p >= 75).map(([, i]) => i);
+  const avgOf = (arr, idx) => idx.length ? idx.reduce((s, i) => s + arr[i], 0) / idx.length : 0;
+  const healthGap = avgOf(health, topIdx) - avgOf(health, bottomIdx);
+  const happinessGap = avgOf(happiness, topIdx) - avgOf(happiness, bottomIdx);
+
+  const scatterSampleIdx = rows.map((_, i) => i).filter((i) => i % Math.max(1, Math.ceil(rows.length / 300)) === 0);
+  const scatterFamilySES = scatterSampleIdx.map((i) => ({ x: familySES[i], y: success[i] }));
+  const scatterEffort = scatterSampleIdx.map((i) => ({ x: effort[i], y: success[i] }));
+
+  return {
+    sampleSize: rows.length, mobilityRate, wealthRatio,
+    familySESSuccessCorr, effortSuccessCorr, healthGap, happinessGap,
+    scatterFamilySES, scatterEffort,
+  };
 }
 
 /* ============================================================
@@ -1885,6 +1984,7 @@ function AttributionComparisonRow({ label, note, selfValue, actualValue, weight 
 /* 提醒樣式的小卡片，用來讓玩家知道「這一輪模擬套用的是哪一種前提假設」。
    刻意安排在玩家自己完成歸因估計「之後」才出現（reveal／回到人生階段），
    避免先看到前提說明而影響了原本應該出於直覺的估計。 */
+const BLIND_MODE_GUESS_OPTIONS = [...PRESET_ORDER.map((key) => ({ key, label: PRESETS[key].label })), { key: 'custom', label: '自訂社會 Custom Society（不是上面任何一個固定前提）' }];
 function PremiseNotice({ settings, compact }) {
   const activeKey = getActivePresetKey(settings);
   const preset = activeKey ? PRESETS[activeKey] : null;
@@ -2065,6 +2165,7 @@ const TOGGLE_FIELDS = [
   { key: 'enableMultipleTestingLesson', label: '是否開啟 multiple testing 教學' },
   { key: 'enablePValueLesson', label: '是否開啟 p-value 教學' },
   { key: 'enableTimeRelevantEvents', label: '是否開啟時事事件包（EVENT 09–22）' },
+  { key: 'blindMode', label: '盲玩模式：學生不知道目前是哪種社會' },
   { key: 'enableRecessionShock', label: '世代衝擊・經濟衰退' },
   { key: 'enableHousingBoomShock', label: '世代衝擊・房價上漲' },
   { key: 'enablePandemicShock', label: '世代衝擊・疫情' },
@@ -2150,6 +2251,28 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
         </div>
       </section>
       <section className="mb-8">
+        <h2 className="text-sm text-inkDim mb-3">📊 統計實驗室・成功／努力操作化</h2>
+        <div className="panel p-4 space-y-4">
+          <p className="text-xs text-inkFaint leading-relaxed">
+            「成功」與「努力」在社會科學裡都不是單一、無爭議的測量，同一個概念換一種操作化方式，看到的相關與迴歸係數也可能不同。這裡讓學生體驗「操作化選擇如何改變故事」。
+          </p>
+          <div>
+            <div className="text-sm text-ink mb-1.5">Success Operationalization（成功的操作化）</div>
+            <select value={settings.successOperationalization} onChange={(e) => updateSettings({ successOperationalization: e.target.value })}
+              className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
+              {SUCCESS_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
+            </select>
+          </div>
+          <div>
+            <div className="text-sm text-ink mb-1.5">Effort Operationalization（努力的操作化）</div>
+            <select value={settings.effortOperationalization} onChange={(e) => updateSettings({ effortOperationalization: e.target.value })}
+              className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
+              {EFFORT_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
+            </select>
+          </div>
+        </div>
+      </section>
+      <section className="mb-8">
         <h2 className="text-sm text-inkDim mb-3">教學功能開關</h2>
         <div className="panel divide-y divide-borderc">
           {TOGGLE_FIELDS.map(({ key, label }) => (
@@ -2160,7 +2283,57 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
           ))}
         </div>
       </section>
+      <section className="mb-8">
+        <h2 className="text-sm text-inkDim mb-3">▶ 預測結果（Preview Simulation）</h2>
+        <PreviewSimulationPanel settings={settings} />
+      </section>
       <button onClick={resetSettingsToDefault} className="btn-ghost px-5 py-2.5 text-sm">恢復預設</button>
+    </div>
+  );
+}
+function PreviewSimulationPanel({ settings }) {
+  const [state, setState] = useState({ status: 'idle', result: null });
+  const runPreview = () => {
+    setState({ status: 'loading', result: null });
+    setTimeout(() => {
+      const result = runPreviewSimulation(settings, 1000);
+      setState({ status: 'done', result });
+    }, 30);
+  };
+  return (
+    <div className="panel p-4 space-y-4">
+      <p className="text-xs text-inkFaint leading-relaxed">
+        不進入正式遊戲，直接快速模擬 1,000 個人生，先確認「我設定的這個社會，統計結構真的符合我的預期嗎？」
+      </p>
+      <button onClick={runPreview} disabled={state.status === 'loading'}
+        className="btn-primary px-5 py-2.5 text-sm disabled:opacity-50">
+        {state.status === 'loading' ? '模擬中…' : '▶ 試跑 1,000 個人生'}
+      </button>
+      {state.status === 'done' && state.result && (
+        <div className="space-y-4 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <StatBox label="社會流動率" value={(state.result.mobilityRate * 100).toFixed(1) + '%'} />
+            <StatBox label="收入不平等（P90/P10）" value={state.result.wealthRatio != null ? state.result.wealthRatio.toFixed(2) : 'N/A'} />
+            <StatBox label="家庭背景×成功相關" value={state.result.familySESSuccessCorr.toFixed(3)} />
+            <StatBox label="努力×成功相關" value={state.result.effortSuccessCorr.toFixed(3)} />
+            <StatBox label="健康差距（高低家庭四分位）" value={state.result.healthGap.toFixed(1)} />
+            <StatBox label="幸福差距（高低家庭四分位）" value={state.result.happinessGap.toFixed(1)} />
+          </div>
+          <p className="text-xs text-inkFaint leading-relaxed">
+            社會流動率：家庭背景百分位與最終成功百分位落在不同四分位的比例，愈高代表這個社會裡「起點不等於終點」的情形愈常見。收入不平等以財富的 P90/P10 比值呈現，數值愈大代表頂層與底層財富差距愈懸殊。健康／幸福差距則比較家庭背景前 25% 與後 25% 兩群人的平均值差異。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-inkFaint mb-1.5 font-mono">Family SES × Success</div>
+              <ScatterChart data={state.result.scatterFamilySES} xLabel="家庭背景 Family SES" yLabel="成功 Success" />
+            </div>
+            <div>
+              <div className="text-xs text-inkFaint mb-1.5 font-mono">Effort × Success</div>
+              <ScatterChart data={state.result.scatterEffort} xLabel="努力 Effort" yLabel="成功 Success" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2171,6 +2344,8 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
 function GameScreen({ player, nextEvent, phase, settings, choose, goToAttribution, submitAttribution, goToAnalysis }) {
   const [lastNarrative, setLastNarrative] = useState(null);
   const lastEventIdRef = useRef(null);
+  const [blindGuess, setBlindGuess] = useState(null);
+  const [blindGuessSubmitted, setBlindGuessSubmitted] = useState(false);
 
   const handleChoose = (choiceId) => {
     lastEventIdRef.current = nextEvent.id;
@@ -2221,6 +2396,25 @@ function GameScreen({ player, nextEvent, phase, settings, choose, goToAttributio
   }
 
   if (phase === 'reveal') {
+    if (settings.blindMode && !blindGuessSubmitted) {
+      return (
+        <div className="min-h-screen px-4 py-12 max-w-xl mx-auto">
+          <Panel eyebrow="盲玩模式 · 先猜猜看再揭曉">
+            <h2 className="font-display text-xl text-ink mb-1">你覺得自己剛才生活在哪一種社會？</h2>
+            <p className="text-sm text-inkFaint mb-4">在揭曉答案之前，先憑你剛才這一輪人生的真實感受猜猜看：老師這次設定的比較接近哪一種社會前提？</p>
+            <div className="flex flex-col gap-2 mb-5">
+              {BLIND_MODE_GUESS_OPTIONS.map((opt) => (
+                <button key={opt.key} onClick={() => setBlindGuess(opt.key)}
+                  className={'text-left px-4 py-3 rounded-lg border text-sm transition-colors ' + (blindGuess === opt.key ? 'bg-brass border-brass text-[#191307]' : 'bg-surface2 border-borderc text-ink hover:border-brass')}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setBlindGuessSubmitted(true)} disabled={!blindGuess} className="btn-primary w-full py-3.5 disabled:opacity-40">送出我的猜測，看看實際設定</button>
+          </Panel>
+        </div>
+      );
+    }
     const hiddenFactors = [
       { name: '經濟資本', value: player.economicCapital }, { name: '文化資本', value: player.culturalCapital },
       { name: '社會資本', value: player.socialCapital }, { name: '機會', value: player.opportunity },
@@ -2228,11 +2422,23 @@ function GameScreen({ player, nextEvent, phase, settings, choose, goToAttributio
       { name: '人際', value: player.interpersonal },
     ];
     const fam = player.family;
+    const actualKey = getActivePresetKey(settings) || 'custom';
+    const guessCorrect = settings.blindMode && blindGuess === actualKey;
     return (
       <div className="min-h-screen px-4 py-12 max-w-2xl mx-auto">
         <Panel eyebrow="解密你的人生 · 檔案首度公開">
           <h2 className="font-display text-xl text-ink mb-1">解密你的人生</h2>
           <p className="text-sm text-inkFaint mb-4">以下為本模擬世界的生成機制，用來幫助理解不同因素如何共同影響人生結果，不代表真實世界存在完全相同的比例。</p>
+          {settings.blindMode && blindGuess && (
+            <div className={'rounded-xl border px-4 py-3 mb-4 ' + (guessCorrect ? 'border-sage/50 bg-sage-soft' : 'border-rust/50 bg-rust-soft')}>
+              <div className="text-xs font-mono uppercase tracking-wide mb-1 text-inkFaint">你的猜測 vs 實際設定</div>
+              <div className="text-sm text-ink">
+                你猜的是「{(BLIND_MODE_GUESS_OPTIONS.find((o) => o.key === blindGuess) || {}).label}」，
+                實際設定是「{(BLIND_MODE_GUESS_OPTIONS.find((o) => o.key === actualKey) || {}).label}」。
+                {guessCorrect ? '你猜對了！' : '猜得不太一樣——這正好可以拿來討論：主觀感受到的人生故事，跟背後的統計結構之間有多大的落差？'}
+              </div>
+            </div>
+          )}
           <PremiseNotice settings={settings} />
           <h3 className="text-sm text-ink font-medium mb-3">你出生時的家庭背景</h3>
           <div className="grid grid-cols-2 gap-3 text-left mb-6">
@@ -2367,8 +2573,8 @@ function AnalysisScreen({ seed, player, npcDataset, selfAttribution, settings, r
 
   const bundle = useMemo(() => {
     if (!npcDataset || !seed) return null;
-    return buildAnalysisBundle(npcDataset, seed);
-  }, [npcDataset, seed]);
+    return buildAnalysisBundle(npcDataset, seed, settings);
+  }, [npcDataset, seed, settings]);
 
   if (!player || !bundle || !seed) {
     return <div className="min-h-screen flex items-center justify-center text-inkFaint text-sm font-mono">正在生成模擬人口資料...</div>;
@@ -2395,7 +2601,7 @@ function AnalysisScreen({ seed, player, npcDataset, selfAttribution, settings, r
       {step === 'scatterGuess' && (
         <Panel eyebrow="社會科學解密 · 觀察資料">
           <h2 className="font-display text-lg text-ink mb-4">努力的人比較成功嗎？</h2>
-          <ScatterChart data={bundle.scatterData} xLabel="努力 Effort" yLabel="成功 Success" />
+          <ScatterChart data={bundle.scatterData} xLabel={bundle.effortOp.def.label} yLabel={bundle.successOp.def.label} />
           <p className="text-sm text-inkDim mt-4 mb-3">看起來兩者有關係嗎？</p>
           <div className="flex gap-3 mb-1">
             {[{ id: 'yes', label: '有' }, { id: 'no', label: '沒有' }, { id: 'unsure', label: '不確定' }].map((opt) => (
@@ -2427,7 +2633,7 @@ function AnalysisScreen({ seed, player, npcDataset, selfAttribution, settings, r
             <StatBox label="β (係數)" value={beta1.toFixed(3)} />
             <StatBox label="p 值" value={fmtP(p1)} />
           </div>
-          <ScatterChart data={bundle.scatterData} xLabel="努力 Effort" yLabel="成功 Success" regressionLine={{ intercept: bundle.model1.intercept, slope: beta1 }} />
+          <ScatterChart data={bundle.scatterData} xLabel={bundle.effortOp.def.label} yLabel={bundle.successOp.def.label} regressionLine={{ intercept: bundle.model1.intercept, slope: beta1 }} />
           <ContinueButton onClick={next} />
         </Panel>
       )}
