@@ -489,6 +489,24 @@ const DEFAULT_SETTINGS = {
      發生時，個人承受的負面衝擊會被大幅緩衝）。每一個滑桿只緩衝「特定類型」的負面衝擊，
      不影響正面效果，也不影響其他類型的風險。 */
   unemploymentSupport: 40, healthcareSupport: 40, educationSupport: 40, childcareSupport: 40, housingSupport: 40, eldercareSupport: 40,
+  /* 起始不平等 Starting Inequality：0 = 家庭背景幾乎人人相同（起跑點壓縮），
+     50 = 目前預設的分散程度，100 = 家庭背景差距被放大（贏家與輸家的起跑點差更遠）。
+     只改變「分布的離散程度」，不改變平均值，藏富與藏窮的比例不變。 */
+  wealthInequality: 50, educationInequality: 50, culturalCapitalInequality: 50, socialCapitalInequality: 50, regionalInequality: 50,
+  /* 資源轉換 Resource Conversion：0 = 該類資本幾乎換不到對應資源，100 = 該類資本
+     能高效換到對應資源（例如：有錢就能大幅買到時間、買到教育機會）。50 為目前預設換算率。 */
+  moneyToTimeStrength: 50, moneyToEducationStrength: 50, socialCapitalToOpportunityStrength: 50, culturalCapitalToEducationStrength: 50,
+  /* 抉擇強度 Trade-off Strength：數值愈高，代表「魚與熊掌不可兼得」的抉擇後座力愈強
+     （例如兼顧事業與家庭、事業與健康、照顧與事業的衝突）。50 為目前預設強度。 */
+  careerFamilyConflict: 50, careerHealthConflict: 50, careCareerConflict: 50,
+  /* 性別照顧分工 Gender Care Distribution：0 = 照顧責任由所有性別平均承擔（預設，
+     不改變現有平衡），100 = 照顧責任高度集中在女性身上，使女性在照顧相關負面衝擊中
+     承受更大代價、男性承受較小代價。 */
+  careDistributionEquality: 0,
+  /* 世代衝擊 Cohort Shock：每個開關預設關閉，教師可自由開啟一種或多種總體衝擊，
+     讓同一輪模擬的所有人（玩家＋NPC）共同經歷同一個總體事件，但依個人條件承受不同幅度。 */
+  enableRecessionShock: false, enableHousingBoomShock: false, enablePandemicShock: false, enableAutomationShock: false,
+  enableOffshoringShock: false, enableEducationExpansionShock: false, enableWelfareReformShock: false,
   enableFamilyCrisis: true, enablePoliticalCapital: true, enableMultipleTestingLesson: true, enablePValueLesson: true, enableTimeRelevantEvents: true,
 };
 const SETTINGS_BOUNDS = {
@@ -507,6 +525,19 @@ const SETTINGS_BOUNDS = {
   childcareSupport: { min: 0, max: 100, step: 5 },
   housingSupport: { min: 0, max: 100, step: 5 },
   eldercareSupport: { min: 0, max: 100, step: 5 },
+  wealthInequality: { min: 0, max: 100, step: 5 },
+  educationInequality: { min: 0, max: 100, step: 5 },
+  culturalCapitalInequality: { min: 0, max: 100, step: 5 },
+  socialCapitalInequality: { min: 0, max: 100, step: 5 },
+  regionalInequality: { min: 0, max: 100, step: 5 },
+  moneyToTimeStrength: { min: 0, max: 100, step: 5 },
+  moneyToEducationStrength: { min: 0, max: 100, step: 5 },
+  socialCapitalToOpportunityStrength: { min: 0, max: 100, step: 5 },
+  culturalCapitalToEducationStrength: { min: 0, max: 100, step: 5 },
+  careerFamilyConflict: { min: 0, max: 100, step: 5 },
+  careerHealthConflict: { min: 0, max: 100, step: 5 },
+  careCareerConflict: { min: 0, max: 100, step: 5 },
+  careDistributionEquality: { min: 0, max: 100, step: 5 },
 };
 function clampSettings(settings) {
   const out = { ...settings };
@@ -655,19 +686,19 @@ const CORE_EVENTS = [
           { condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '媽媽發現你英文不太好，幫你安排了英文家教。' },
           { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '今天父母工作比較晚，你需要幫忙照顧弟弟，但你仍然擠出時間讀書。' },
         ],
-        hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6 }, { stat: 'ability', delta: 3 }] },
+        hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6, conversionType: 'culturalCapitalToEducation' }, { stat: 'ability', delta: 3 }] },
       { id: 'play_instead', text: '先出去玩，明天早起再讀', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'education', delta: 1 }] },
       { id: 'give_up_studying', text: '乾脆放棄，先打電動紓壓', visibleEffects: [{ stat: 'effort', delta: -6 }], hiddenEffects: [{ stat: 'happiness', delta: -3 }, { stat: 'education', delta: -2 }, { stat: 'ability', delta: -2 }] },
     ] },
   { id: 'event_02_first_big_exam', stage: 'elementary', title: '第一次大考', description: '學校即將舉行第一次重要的段考，全班都在準備。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'prepare', text: '按照自己的步調準備', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'happiness', delta: -3 }, { stat: 'ability', delta: 3 }] },
+      { id: 'prepare', text: '按照自己的步調準備', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5, conversionType: 'culturalCapitalToEducation' }, { stat: 'happiness', delta: -3 }, { stat: 'ability', delta: 3 }] },
       { id: 'ask_help', text: '請家人或同學幫忙一起複習', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4 }, { stat: 'socialCapital', delta: 2 }, { stat: 'ability', delta: 2 }] },
       { id: 'panic_and_skip', text: '考前太緊張，乾脆隨便應付', visibleEffects: [{ stat: 'happiness', delta: -6 }], hiddenEffects: [{ stat: 'education', delta: -3 }, { stat: 'ability', delta: -1 }] },
     ] },
   { id: 'event_03_teacher_says', stage: 'middleSchool', title: '老師說', description: '老師在班會上說：「只要肯努力，每個人都有機會考上好大學。」', tags: ['core'], weight: 1,
     choices: [
-      { id: 'work_harder', text: '我要更加努力', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'education', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.4 }, { stat: 'ability', delta: 3, scaleBy: 'culturalCapital', scaleFactor: 0.4 }], resultNarrative: '你下定決心更加努力，但之後不同背景的同學可能得到不同的資源與機會。' },
+      { id: 'work_harder', text: '我要更加努力', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'education', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.4 }, { stat: 'ability', delta: 3, scaleBy: 'culturalCapital', scaleFactor: 0.4, conversionType: 'culturalCapitalToEducation' }], resultNarrative: '你下定決心更加努力，但之後不同背景的同學可能得到不同的資源與機會。' },
       { id: 'stay_steady', text: '維持原本的步調就好', visibleEffects: [{ stat: 'happiness', delta: 3 }] },
       { id: 'give_up_trying', text: '不相信這句話，乾脆擺爛', visibleEffects: [{ stat: 'effort', delta: -10 }], hiddenEffects: [{ stat: 'education', delta: -4 }] },
     ] },
@@ -680,14 +711,14 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_05_family_crisis', stage: 'middleSchool', title: '家庭的難關', description: '家裡最近不太平靜：可能是父母工作變動、家人生病，或是需要搬家。', tags: ['core', 'family-crisis'], weight: 1,
     choices: [
-      { id: 'keep_trying', text: '繼續努力面對課業', visibleEffects: [{ stat: 'effort', delta: 10 }, { stat: 'health', delta: -4 }], hiddenEffects: [{ stat: 'interpersonal', delta: -6 }], resultNarrative: '你把心力都放在課業上，但也因此少了陪伴家人的時間。' },
+      { id: 'keep_trying', text: '繼續努力面對課業', visibleEffects: [{ stat: 'effort', delta: 10 }, { stat: 'health', delta: -4 }], hiddenEffects: [{ stat: 'interpersonal', delta: -6, tradeoffAmplifiedBy: 'careerFamilyConflict' }], resultNarrative: '你把心力都放在課業上，但也因此少了陪伴家人的時間。' },
       { id: 'take_time', text: '先花時間陪伴家人、處理家裡的事', visibleEffects: [{ stat: 'socialCapital', delta: 3 }], hiddenEffects: [{ stat: 'interpersonal', delta: 6 }] },
       { id: 'avoid_crisis', text: '選擇逃避，把自己關起來', visibleEffects: [{ stat: 'happiness', delta: -6 }], hiddenEffects: [{ stat: 'interpersonal', delta: -10 }, { stat: 'socialCapital', delta: -2 }] },
     ] },
   { id: 'event_06_college_application', stage: 'highSchool', title: '大學申請', description: '申請表要求你：「請描述你的國際經驗與課外活動。」', tags: ['core'], weight: 1,
     choices: [
-      { id: 'write_honestly', text: '如實描述自己目前擁有的經驗', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'opportunity', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '不同背景的你，履歷上會出現不同的出國經驗、社團、比賽、打工或家庭照顧經歷 — 這些都會自然地影響申請結果。' },
-      { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。',
+      { id: 'write_honestly', text: '如實描述自己目前擁有的經驗', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5, conversionType: 'culturalCapitalToEducation' }, { stat: 'opportunity', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '不同背景的你，履歷上會出現不同的出國經驗、社團、比賽、打工或家庭照顧經歷 — 這些都會自然地影響申請結果。' },
+      { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7, conversionType: 'moneyToEducation' }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。',
         unlock: { any: [{ stat: 'family.economicCapital', op: 'gte', value: 60, opportunityGated: true }] } },
       { id: 'rush_application', text: '隨便寫一寫交差，不想花太多心力', visibleEffects: [{ stat: 'effort', delta: -4 }], hiddenEffects: [{ stat: 'opportunity', delta: -4 }, { stat: 'education', delta: -2 }] },
     ] },
@@ -700,12 +731,12 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_08_job_hunting', stage: 'collegeOrWork', title: '求職', description: '你正在準備履歷，投遞第一份正式工作。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'prepare_interview', text: '努力準備面試', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'socialCapital', scaleFactor: 0.5 }, { stat: 'ability', delta: 4 }],
+      { id: 'prepare_interview', text: '努力準備面試', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'socialCapital', scaleFactor: 0.5, conversionType: 'socialCapitalToOpportunity' }, { stat: 'ability', delta: 4 }],
         narrativeBranches: [
           { condition: { stat: 'socialCapital', op: 'gte', value: 65 }, narrative: '親友願意把你的履歷轉交主管，讓你多了一個被看見的機會。' },
           { condition: { stat: 'socialCapital', op: 'lte', value: 35 }, narrative: '你已經投出第 43 封履歷，仍然持續準備每一次面試。' },
         ] },
-      { id: 'ask_referral', text: '請認識的人內部推薦', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 8, scaleBy: 'socialCapital', scaleFactor: 0.8 }, { stat: 'socialCapital', delta: 2 }],
+      { id: 'ask_referral', text: '請認識的人內部推薦', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 8, scaleBy: 'socialCapital', scaleFactor: 0.8, conversionType: 'socialCapitalToOpportunity' }, { stat: 'socialCapital', delta: 2 }],
         resultNarrative: '內部推薦能不能成立，取決於你原本就擁有的人脈存量。' },
       { id: 'apply_widely', text: '海投履歷，廣泛嘗試各種職缺', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'opportunity', delta: 3 }, { stat: 'happiness', delta: -3 }] },
     ] },
@@ -718,13 +749,13 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_24_first_job_friction', stage: 'earlyCareer', title: '第一份工作的磨合', description: '進入職場後，你發現理想與現實有落差，主管交辦的任務也不總是你熟悉的。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4 }, { stat: 'happiness', delta: -4 }, { stat: 'ability', delta: 5 }] },
+      { id: 'push_through', text: '硬著頭皮學，主動請教前輩', visibleEffects: [{ stat: 'effort', delta: 12 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 5, scaleBy: 'socialCapital', scaleFactor: 0.4, conversionType: 'socialCapitalToOpportunity' }, { stat: 'happiness', delta: -4, tradeoffAmplifiedBy: 'careerFamilyConflict' }, { stat: 'ability', delta: 5 }] },
       { id: 'find_balance', text: '先求穩定，把生活步調顧好', visibleEffects: [{ stat: 'happiness', delta: 5 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
       { id: 'quit_abruptly', text: '受不了壓力，裸辭走人', visibleEffects: [{ stat: 'happiness', delta: 4 }], hiddenEffects: [{ stat: 'careerPrestige', delta: -6, dampenedBy: 'unemploymentSupport' }, { stat: 'happiness', delta: 5 }] },
     ] },
   { id: 'event_27_cram_school', stage: 'middleSchool', title: '要不要去補習班', description: '班上不少同學都去補習，你也在猶豫要不要跟進。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'go_cram', text: '去補習班加強', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'ability', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '補習能不能負擔、能不能持續，跟家庭的經濟資本有很大關係。' },
+      { id: 'go_cram', text: '去補習班加強', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'education', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7, conversionType: 'moneyToEducation' }, { stat: 'ability', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5, conversionType: 'moneyToEducation' }], resultNarrative: '補習能不能負擔、能不能持續，跟家庭的經濟資本有很大關係。' },
       { id: 'self_study', text: '靠自己安排讀書計畫', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'education', delta: 4 }, { stat: 'ability', delta: 4 }] },
       { id: 'stop_caring', text: '完全不想讀書，得過且過', visibleEffects: [{ stat: 'effort', delta: -8 }], hiddenEffects: [{ stat: 'education', delta: -5, dampenedBy: 'educationSupport' }, { stat: 'ability', delta: -2, dampenedBy: 'educationSupport' }] },
     ] },
@@ -741,19 +772,19 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_29_recognition', stage: 'earlyCareer', title: '被看見，還是被忽略', description: '一項專案完成後，功勞歸屬變得有點模糊。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'speak_up', text: '主動跟主管說明自己的貢獻', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 6, scaleBy: 'socialCapital', scaleFactor: 0.5 }] },
+      { id: 'speak_up', text: '主動跟主管說明自己的貢獻', visibleEffects: [{ stat: 'effort', delta: 6 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 6, scaleBy: 'socialCapital', scaleFactor: 0.5, conversionType: 'socialCapitalToOpportunity' }] },
       { id: 'stay_quiet', text: '相信努力遲早會被看到', visibleEffects: [{ stat: 'happiness', delta: 2 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 2 }] },
       { id: 'overclaim_credit', text: '在同事面前誇大自己的貢獻', visibleEffects: [{ stat: 'happiness', delta: -2 }], hiddenEffects: [{ stat: 'careerPrestige', delta: 4 }, { stat: 'socialCapital', delta: -5 }] },
     ] },
   { id: 'event_30_health_check', stage: 'midlife', title: '健康檢查的紅字', description: '例行健檢報告出現幾項紅字，醫生建議你調整作息。', tags: ['core'], weight: 1,
     choices: [
       { id: 'adjust_lifestyle', text: '認真調整作息與運動習慣', visibleEffects: [{ stat: 'health', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: 3 }] },
-      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8, dampenedBy: 'healthcareSupport' }, { stat: 'happiness', delta: -3 }] },
+      { id: 'keep_working', text: '工作優先，之後再說', visibleEffects: [{ stat: 'careerPrestige', delta: 3 }], hiddenEffects: [{ stat: 'health', delta: -8, dampenedBy: 'healthcareSupport', tradeoffAmplifiedBy: 'careerHealthConflict' }, { stat: 'happiness', delta: -3 }] },
       { id: 'ignore_report', text: '乾脆不理會健檢報告', visibleEffects: [], hiddenEffects: [{ stat: 'health', delta: -12, dampenedBy: 'healthcareSupport' }, { stat: 'happiness', delta: -2 }] },
     ] },
   { id: 'event_25_late_life_choice', stage: 'lateLife', title: '退休前的抉擇', description: '再過幾年就要退休了，你在想要不要拚最後一段職涯高峰，還是把重心放回家庭與健康。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'push_career', text: '再拚一波，爭取最後的升遷機會', visibleEffects: [{ stat: 'effort', delta: 8 }, { stat: 'careerPrestige', delta: 6 }], hiddenEffects: [{ stat: 'health', delta: -5 }, { stat: 'happiness', delta: -4 }] },
+      { id: 'push_career', text: '再拚一波，爭取最後的升遷機會', visibleEffects: [{ stat: 'effort', delta: 8 }, { stat: 'careerPrestige', delta: 6 }], hiddenEffects: [{ stat: 'health', delta: -5, tradeoffAmplifiedBy: 'careerHealthConflict' }, { stat: 'happiness', delta: -4, tradeoffAmplifiedBy: 'careerHealthConflict' }] },
       { id: 'focus_family', text: '把時間留給家人與自己的健康', visibleEffects: [{ stat: 'happiness', delta: 8 }, { stat: 'health', delta: 5 }] },
       { id: 'try_both_poorly', text: '兩頭都想兼顧，結果兩邊都沒顧好', visibleEffects: [{ stat: 'happiness', delta: -3 }], hiddenEffects: [{ stat: 'happiness', delta: -6 }, { stat: 'health', delta: -4 }, { stat: 'careerPrestige', delta: -2 }] },
     ] },
@@ -775,7 +806,7 @@ const TIME_RELEVANT_EVENTS = [
     ] },
   { id: 'event_10_rent_or_buy', stage: 'youngAdultCareer', title: '房子，租還是買', description: '房東通知漲租金，你開始認真想「到底要不要買房」。', tags: ['time-relevant'], weight: 1,
     choices: [
-      { id: 'save_for_down_payment', text: '拚命存頭期款', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: -8, scaleBy: 'economicCapital', scaleFactor: -0.5, dampenedBy: 'housingSupport' }],
+      { id: 'save_for_down_payment', text: '拚命存頭期款', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'happiness', delta: -8, scaleBy: 'economicCapital', scaleFactor: -0.5, dampenedBy: 'housingSupport', conversionType: 'moneyToTime' }],
         narrativeBranches: [
           { condition: { stat: 'family.economicCapital', op: 'gte', value: 65 }, narrative: '家裡願意支援一部分頭期款，壓力小了不少。' },
           { condition: { stat: 'family.economicCapital', op: 'lte', value: 35 }, narrative: '完全靠自己存錢，這條路會走得比較久。' },
@@ -798,8 +829,8 @@ const TIME_RELEVANT_EVENTS = [
   { id: 'event_13_long_term_care', stage: 'midlife', title: '長照的重量', description: '家中長輩需要長期照護，你必須在「自己照顧」「申請長照資源」「請看護」之間做選擇。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'care_myself', text: '自己承擔照顧責任', visibleEffects: [{ stat: 'happiness', delta: -6 }], hiddenEffects: [{ stat: 'socialCapital', delta: 4 }, { stat: 'health', delta: -5 }, { stat: 'interpersonal', delta: 8 }] },
-      { id: 'use_resources', text: '申請政府長照資源／聘請看護', visibleEffects: [{ stat: 'happiness', delta: -4 }], hiddenEffects: [{ stat: 'health', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '經濟資本會影響能選擇的資源與品質，但公共資源與親屬支援仍能組合運用。' },
-      { id: 'quit_job_to_care', text: '壓力過大，乾脆辭職全職照顧', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8, dampenedBy: 'eldercareSupport' }, { stat: 'economicCapital', delta: -3, dampenedBy: 'eldercareSupport' }, { stat: 'interpersonal', delta: 5 }], resultNarrative: '照顧責任常常迫使人退出職場，這也是許多中年勞動者職涯中斷的常見原因；長照支持系統愈完整，這個選擇造成的職涯與經濟衝擊就愈能被緩衝。' },
+      { id: 'use_resources', text: '申請政府長照資源／聘請看護', visibleEffects: [{ stat: 'happiness', delta: -4 }], hiddenEffects: [{ stat: 'health', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.5, conversionType: 'moneyToTime' }], resultNarrative: '經濟資本會影響能選擇的資源與品質，但公共資源與親屬支援仍能組合運用。' },
+      { id: 'quit_job_to_care', text: '壓力過大，乾脆辭職全職照顧', visibleEffects: [], hiddenEffects: [{ stat: 'careerPrestige', delta: -8, dampenedBy: 'eldercareSupport', tradeoffAmplifiedBy: 'careCareerConflict', genderCareGated: true }, { stat: 'economicCapital', delta: -3, dampenedBy: 'eldercareSupport', genderCareGated: true }, { stat: 'interpersonal', delta: 5 }], resultNarrative: '照顧責任常常迫使人退出職場，這也是許多中年勞動者職涯中斷的常見原因；長照支持系統愈完整，這個選擇造成的職涯與經濟衝擊就愈能被緩衝，而承擔這個代價的比例，也會因為社會的照護分工規範而在不同性別之間有所不同。' },
     ] },
   { id: 'event_14_low_birthrate', stage: 'collegeOrWork', title: '少子化與招生', description: '你申請的學校今年招生人數創新低，學校釋出更多獎學金與彈性名額搶學生。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -961,19 +992,32 @@ const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS, ...STRUCTURE_EVENTS
 /* ============================================================
    5. GAME ENGINE — family generation, player creation, effects, events
    ============================================================ */
-function generateFamilyBackground(rng) {
+/* 起點不平等 Starting Inequality —— 這五個設定不改變任何一項家庭背景變數的「平均值」，
+   只改變它的「離散程度／分佈寬窄」：滑桿愈高，同一個社會裡不同家庭之間的差距就愈大；
+   滑桿愈低，大家的起點就愈接近。50 = 目前遊戲平衡下的離散程度。 */
+function inequalityVarianceMultiplier(settings, key) {
+  const fallback = DEFAULT_SETTINGS[key] != null ? DEFAULT_SETTINGS[key] : 50;
+  const raw = settings && settings[key] != null ? settings[key] : fallback;
+  return clamp(raw, 0, 100) / 50;
+}
+function generateFamilyBackground(rng, settings) {
+  const wealthVar = inequalityVarianceMultiplier(settings, 'wealthInequality');
+  const eduVar = inequalityVarianceMultiplier(settings, 'educationInequality');
+  const culturalVar = inequalityVarianceMultiplier(settings, 'culturalCapitalInequality');
+  const socialVar = inequalityVarianceMultiplier(settings, 'socialCapitalInequality');
+  const regionalVar = inequalityVarianceMultiplier(settings, 'regionalInequality');
   const ses = clamp(rng.normal(50, 20), 0, 100);
-  const householdIncome = Math.round(clamp(ses * 15000 + rng.normal(0, 80000), 200000, 8000000));
-  const fatherEducation = clamp(ses * 0.7 + rng.normal(0, 15), 0, 100);
-  const motherEducation = clamp(ses * 0.7 + rng.normal(0, 15), 0, 100);
-  const booksAtHome = Math.round(clamp(ses * 2 + rng.normal(0, 20), 0, 500));
-  const housingSecurity = clamp(ses * 0.6 + rng.normal(0, 20), 0, 100);
-  const professionalConnections = clamp(ses * 0.5 + rng.normal(0, 20), 0, 100);
+  const householdIncome = Math.round(clamp(ses * 15000 + rng.normal(0, 80000 * wealthVar), 200000, 8000000));
+  const fatherEducation = clamp(ses * 0.7 + rng.normal(0, 15 * eduVar), 0, 100);
+  const motherEducation = clamp(ses * 0.7 + rng.normal(0, 15 * eduVar), 0, 100);
+  const booksAtHome = Math.round(clamp(ses * 2 + rng.normal(0, 20 * culturalVar), 0, 500));
+  const housingSecurity = clamp(ses * 0.6 + rng.normal(0, 20 * regionalVar), 0, 100);
+  const professionalConnections = clamp(ses * 0.5 + rng.normal(0, 20 * socialVar), 0, 100);
   const parentInPolitics = rng.probability(PARENT_IN_POLITICS_BASE_PROBABILITY);
   const politicalConnections = clamp(ses * 0.3 + rng.normal(0, 15) + (parentInPolitics ? 35 : 0), 0, 100);
-  const culturalCapital = clamp(ses * 0.65 + rng.normal(0, 15), 0, 100);
-  const socialCapital = clamp(ses * 0.5 + professionalConnections * 0.3 + rng.normal(0, 12), 0, 100);
-  const economicCapital = clamp(ses * 0.8 + rng.normal(0, 10), 0, 100);
+  const culturalCapital = clamp(ses * 0.65 + rng.normal(0, 15 * culturalVar), 0, 100);
+  const socialCapital = clamp(ses * 0.5 + professionalConnections * 0.3 + rng.normal(0, 12 * socialVar), 0, 100);
+  const economicCapital = clamp(ses * 0.8 + rng.normal(0, 10 * wealthVar), 0, 100);
   const occWeights = PARENT_OCCUPATIONS.map((_, i) => Math.max(1, 100 - Math.abs(i - ses / 5)));
   const fatherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
   const motherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
@@ -986,9 +1030,9 @@ function generateFamilyBackground(rng) {
 function familySESIndex(family) {
   return clamp(family.economicCapital * 0.4 + family.culturalCapital * 0.3 + family.socialCapital * 0.2 + ((family.fatherEducation + family.motherEducation) / 2) * 0.1, 0, 100);
 }
-function createPlayer(rngSeed, isNPC) {
+function createPlayer(rngSeed, isNPC, settings) {
   const rng = createRNG(rngSeed);
-  const family = generateFamilyBackground(rng);
+  const family = generateFamilyBackground(rng, settings);
   const ability = clamp(rng.normal(55, 18), 0, 100);
   const health = clamp(rng.normal(70, 12), 0, 100);
   const gender = rng.randomChoice(['female', 'male', 'other']);
@@ -1017,12 +1061,52 @@ function createPlayer(rngSeed, isNPC) {
    正面效果、以及沒有標記 dampenedBy 的效果，完全不受影響。SAFETY_NET_MAX_DAMPENING
    是安全網開到最強（100）時，最多能削減多少比例的損失幅度。 */
 const SAFETY_NET_MAX_DAMPENING = 0.65;
+/* 資源轉換率 Resource Conversion —— effect.conversionType 標記某個 scaleBy 效果代表
+   哪一種「資源→結果」的轉換關係（金錢→時間、金錢→教育、社會資本→機會、
+   文化資本→教育）。教師設定的對應滑桿（0–100，預設 50 = 目前遊戲平衡）會直接
+   放大或縮小該效果的 scaleFactor，只改變「這種資源轉換的強弱」，不改變方向。 */
+const CONVERSION_TYPE_SETTINGS = {
+  moneyToTime: 'moneyToTimeStrength',
+  moneyToEducation: 'moneyToEducationStrength',
+  socialCapitalToOpportunity: 'socialCapitalToOpportunityStrength',
+  culturalCapitalToEducation: 'culturalCapitalToEducationStrength',
+};
+/* 人生代價 Trade-off Strength —— effect.tradeoffAmplifiedBy 標記某個負面效果代表的是
+   一種「人生代價」（衝刺職涯排擠家庭時間、長工時傷害健康、照護責任拖累職涯累積）。
+   教師設定的強度滑桿（0–100，預設 50 = 目前遊戲平衡）會放大或縮小這個代價的幅度：
+   愈高代表這個社會裡這種取捨愈尖銳，愈低代表這個代價在這個社會裡並不明顯。 */
+const TRADEOFF_MIN_MULTIPLIER = 0.3;
+const TRADEOFF_MAX_MULTIPLIER = 1.7;
+/* 性別角色制度 Gender Role —— effect.genderCareGated 標記某個因承擔照護責任而產生的
+   負面效果。教師設定 careDistributionEquality（0 = 照護責任分配平等，100 = 高度不平等）
+   之後，女性承擔的代價會被放大、男性承擔的代價會被縮小——藉此呈現「不是性別本身
+   決定結果，而是制度／規範透過時間分配的不對等，才造成了結果上的性別差距」。 */
 function applyEffect(player, effect, settings) {
   let delta = effect.delta;
   if (effect.scaleBy) {
     const scaleStat = player[effect.scaleBy] != null ? player[effect.scaleBy] : 50;
-    const factor = effect.scaleFactor != null ? effect.scaleFactor : 1;
+    let factor = effect.scaleFactor != null ? effect.scaleFactor : 1;
+    if (effect.conversionType && CONVERSION_TYPE_SETTINGS[effect.conversionType]) {
+      const settingKey = CONVERSION_TYPE_SETTINGS[effect.conversionType];
+      const fallback = DEFAULT_SETTINGS[settingKey] != null ? DEFAULT_SETTINGS[settingKey] : 50;
+      const raw = settings && settings[settingKey] != null ? settings[settingKey] : fallback;
+      factor = factor * (clamp(raw, 0, 100) / 50);
+    }
     delta = delta * (0.6 + (scaleStat / 100) * factor);
+  }
+  if (effect.tradeoffAmplifiedBy && delta < 0) {
+    const fallback = DEFAULT_SETTINGS[effect.tradeoffAmplifiedBy] != null ? DEFAULT_SETTINGS[effect.tradeoffAmplifiedBy] : 50;
+    const raw = settings && settings[effect.tradeoffAmplifiedBy] != null ? settings[effect.tradeoffAmplifiedBy] : fallback;
+    const strength = clamp(raw, 0, 100);
+    const multiplier = TRADEOFF_MIN_MULTIPLIER + (strength / 100) * (TRADEOFF_MAX_MULTIPLIER - TRADEOFF_MIN_MULTIPLIER);
+    delta = delta * multiplier;
+  }
+  if (effect.genderCareGated && delta < 0 && player.gender) {
+    const fallback = DEFAULT_SETTINGS.careDistributionEquality;
+    const raw = settings && settings.careDistributionEquality != null ? settings.careDistributionEquality : fallback;
+    const unequal = clamp(raw, 0, 100) / 100;
+    const genderMultiplier = player.gender === 'female' ? 1 + unequal * 0.6 : player.gender === 'male' ? 1 - unequal * 0.4 : 1;
+    delta = delta * genderMultiplier;
   }
   if (effect.dampenedBy && delta < 0) {
     const fallback = DEFAULT_SETTINGS[effect.dampenedBy] != null ? DEFAULT_SETTINGS[effect.dampenedBy] : 50;
@@ -1186,6 +1270,91 @@ function estimatePensionMonthly(monthlyIncome, sector) {
   const laborNewPension = pensionBase * 0.358; // ≈10,843 / 30,300
   return Math.round((laborInsurancePension + laborNewPension) / 1000) * 1000;
 }
+/* 世代／總體事件 Cohort Shock —— 這些是「同一輪模擬裡，所有 NPC 與學生角色共同經歷的
+   總體衝擊」，由 cohortSeed（整個模擬回合共用的種子，不是每個角色各自的種子）決定
+   要不要發生、發生哪一種；同一輪只會發生 0 或 1 種，且即使教師開啟了某些類別，
+   也不保證每一輪都會真的發生。發生之後，每個人受到的影響幅度並不相同，而是依照
+   職業部門、家庭資源、教育程度等條件而有差異，呼應「總體衝擊不是對每個人造成一樣的
+   衝擊，而是透過既有的資源與位置分配不同的後果」這個核心概念，也會被相關的社會
+   安全網設定緩衝。這些事件預設全部關閉，教師需要主動開啟才會出現。 */
+const COHORT_SHOCKS = [
+  { key: 'recession', label: '經濟衰退', settingKey: 'enableRecessionShock' },
+  { key: 'housingBoom', label: '房價上漲', settingKey: 'enableHousingBoomShock' },
+  { key: 'pandemic', label: '疫情', settingKey: 'enablePandemicShock' },
+  { key: 'automation', label: 'AI 自動化', settingKey: 'enableAutomationShock' },
+  { key: 'offshoring', label: '產業外移', settingKey: 'enableOffshoringShock' },
+  { key: 'eduExpansion', label: '教育擴張', settingKey: 'enableEducationExpansionShock' },
+  { key: 'welfareReform', label: '福利改革', settingKey: 'enableWelfareReformShock' },
+];
+function pickCohortShock(cohortSeed, settings) {
+  if (!cohortSeed || !settings) return null;
+  const enabled = COHORT_SHOCKS.filter((s) => settings[s.settingKey]);
+  if (enabled.length === 0) return null;
+  const rng = createRNG(cohortSeed + '::cohortShock');
+  if (!rng.probability(0.7)) return null;
+  return rng.randomChoice(enabled).key;
+}
+function dampenMagnitudeBySetting(magnitude, settings, settingKey) {
+  const fallback = DEFAULT_SETTINGS[settingKey] != null ? DEFAULT_SETTINGS[settingKey] : 50;
+  const raw = settings && settings[settingKey] != null ? settings[settingKey] : fallback;
+  const support = clamp(raw, 0, 100);
+  return magnitude * (1 - (support / 100) * SAFETY_NET_MAX_DAMPENING);
+}
+function applyCohortShock(player, shockKey, settings) {
+  if (!shockKey) return player;
+  const sector = player.sector || 'private';
+  const family = player.family || {};
+  let p = { ...player };
+  switch (shockKey) {
+    case 'recession': {
+      const exposed = sector === 'private';
+      const hit = dampenMagnitudeBySetting(exposed ? -0.12 : -0.03, settings, 'unemploymentSupport');
+      p.income = Math.max(0, Math.round(p.income * (1 + hit)));
+      p.happiness = clamp(p.happiness + dampenMagnitudeBySetting(exposed ? -6 : -2, settings, 'unemploymentSupport'));
+      break;
+    }
+    case 'housingBoom': {
+      const cushion = clamp(family.economicCapital || 0, 0, 100) / 100;
+      p.happiness = clamp(p.happiness + dampenMagnitudeBySetting(-10 * (1 - cushion), settings, 'housingSupport'));
+      p.wealth = Math.max(0, Math.round(p.wealth * (1 + dampenMagnitudeBySetting(-0.06 * (1 - cushion), settings, 'housingSupport'))));
+      break;
+    }
+    case 'pandemic': {
+      const contactHeavy = ['廚師', '業務員', '社工', '護理師', '醫師'].includes(p.occupation);
+      p.health = clamp(p.health + dampenMagnitudeBySetting(contactHeavy ? -10 : -4, settings, 'healthcareSupport'));
+      p.happiness = clamp(p.happiness + dampenMagnitudeBySetting(contactHeavy ? -6 : -3, settings, 'healthcareSupport'));
+      break;
+    }
+    case 'automation': {
+      const atRisk = sector === 'private' && p.education < 55;
+      const hit = atRisk ? -0.15 : (p.ability > 70 ? 0.05 : -0.02);
+      p.income = Math.max(0, Math.round(p.income * (1 + dampenMagnitudeBySetting(hit, settings, 'unemploymentSupport'))));
+      p.careerPrestige = clamp(p.careerPrestige + dampenMagnitudeBySetting(atRisk ? -8 : 0, settings, 'educationSupport'));
+      break;
+    }
+    case 'offshoring': {
+      const exposed = ['工程師', '業務員', '自營商'].includes(p.occupation) && sector === 'private';
+      p.income = Math.max(0, Math.round(p.income * (1 + dampenMagnitudeBySetting(exposed ? -0.1 : -0.02, settings, 'unemploymentSupport'))));
+      break;
+    }
+    case 'eduExpansion': {
+      const lowSES = clamp(100 - (family.economicCapital || 0), 0, 100) / 100;
+      p.education = clamp(p.education + 6 * lowSES);
+      p.opportunity = clamp(p.opportunity + 4 * lowSES);
+      break;
+    }
+    case 'welfareReform': {
+      const netKeys = ['unemploymentSupport', 'healthcareSupport', 'educationSupport', 'childcareSupport', 'housingSupport', 'eldercareSupport'];
+      const netAvg = netKeys.reduce((sum, k) => sum + (settings && settings[k] != null ? settings[k] : DEFAULT_SETTINGS[k]), 0) / netKeys.length;
+      const lowSES = clamp(100 - (family.economicCapital || 0), 0, 100) / 100;
+      p.happiness = clamp(p.happiness + (netAvg / 100) * 8 * lowSES);
+      p.wealth = Math.max(0, Math.round(p.wealth + (netAvg / 100) * 20000 * lowSES));
+      break;
+    }
+    default: break;
+  }
+  return p;
+}
 function deriveFinalOutcomes(player, occupationProfile) {
   const profile = occupationProfile || DEFAULT_OCCUPATION_PROFILE;
   const incomeBase = 400000 + player.successScore * 45000 + player.education * 3000;
@@ -1196,7 +1365,7 @@ function deriveFinalOutcomes(player, occupationProfile) {
   const pensionMonthly = estimatePensionMonthly(income / 12, profile.sector);
   return { income, wealth, careerPrestige, pensionMonthly };
 }
-function finalizePlayer(player, settings, rng) {
+function finalizePlayer(player, settings, rng, cohortSeed) {
   const majorRecord = player.history.find((h) => h.eventId === MAJOR_SELECTION_EVENT_ID);
   const majorProfile = majorRecord ? MAJOR_PROFILES[majorRecord.choiceId] : null;
   const attendedCollege = !!majorProfile && majorRecord.choiceId !== 'skip_college';
@@ -1226,7 +1395,14 @@ function finalizePlayer(player, settings, rng) {
   const occupationProfile = OCCUPATION_PROFILES[occupation] || DEFAULT_OCCUPATION_PROFILE;
   const { income, wealth, careerPrestige, pensionMonthly } = deriveFinalOutcomes(withSuccess, occupationProfile);
   const major = majorProfile ? majorProfile.label : '未選填特定科系';
-  return { ...withSuccess, income, wealth, careerPrestige, occupation, major, pensionMonthly, sector: occupationProfile.sector };
+  let finalPlayer = { ...withSuccess, income, wealth, careerPrestige, occupation, major, pensionMonthly, sector: occupationProfile.sector };
+  /* 世代衝擊（Cohort Shock）：同一輪模擬（玩家＋所有 NPC）共享同一個世代種子，
+     決定「是否發生」與「發生哪一種」總體衝擊事件，但每個人受到的影響幅度
+     依照自己的職業、部門、家庭資源、教育與能力而不同，並受既有社會安全網設定緩衝。 */
+  const shockKey = pickCohortShock(cohortSeed, settings);
+  finalPlayer = applyCohortShock(finalPlayer, shockKey, settings);
+  finalPlayer.cohortShock = shockKey || null;
+  return finalPlayer;
 }
 
 /* ============================================================
@@ -1234,7 +1410,7 @@ function finalizePlayer(player, settings, rng) {
    ============================================================ */
 const EVENTS_PER_STAGE = 2;
 function replaySession(seed, settings, pool, history) {
-  let player = createPlayer(seed, false);
+  let player = createPlayer(seed, false, settings);
   const eventsRng = createRNG(seed + '::events');
   const usedEventIds = new Set();
   let historyIndex = 0;
@@ -1261,13 +1437,13 @@ function replaySession(seed, settings, pool, history) {
       }
     }
   }
-  return { player: finalizePlayer(player, settings, eventsRng), nextEvent: null, done: true };
+  return { player: finalizePlayer(player, settings, eventsRng, seed), nextEvent: null, done: true };
 }
 function simulateFullLife(options) {
-  const { seed, settings, pool, isNPC, choiceSelector, eventsPerStage } = options;
+  const { seed, settings, pool, isNPC, choiceSelector, eventsPerStage, cohortSeed } = options;
   const selector = choiceSelector || ((player, event, rng) => rng.randomChoice(event.choices));
   const perStage = eventsPerStage || EVENTS_PER_STAGE;
-  let player = createPlayer(seed, !!isNPC);
+  let player = createPlayer(seed, !!isNPC, settings);
   const eventsRng = createRNG(seed + '::events');
   const usedEventIds = new Set();
   for (const stage of LIFE_STAGES) {
@@ -1285,7 +1461,7 @@ function simulateFullLife(options) {
       player = result.player;
     }
   }
-  return finalizePlayer(player, settings, eventsRng);
+  return finalizePlayer(player, settings, eventsRng, cohortSeed || seed);
 }
 
 /* ============================================================
@@ -1304,7 +1480,7 @@ function generateNPCDataset(playerSeed, player, pool, settings) {
   const npcPlayers = [];
   const sampleSize = Math.max(1, Math.round(settings.npcSampleSize));
   for (let i = 0; i < sampleSize; i++) {
-    npcPlayers.push(simulateFullLife({ seed: playerSeed + '::npc::' + i, settings, pool, isNPC: true }));
+    npcPlayers.push(simulateFullLife({ seed: playerSeed + '::npc::' + i, settings, pool, isNPC: true, cohortSeed: playerSeed }));
   }
   const rows = [playerToDatasetRow(player), ...npcPlayers.map(playerToDatasetRow)];
   return { rows, npcPlayers };
@@ -1869,6 +2045,19 @@ const NUMERIC_FIELDS = [
   { key: 'childcareSupport', label: '社會安全網・育兒支持' },
   { key: 'housingSupport', label: '社會安全網・住房支持' },
   { key: 'eldercareSupport', label: '社會安全網・長照支持' },
+  { key: 'wealthInequality', label: '起始不平等・財富分布離散度' },
+  { key: 'educationInequality', label: '起始不平等・父母教育分布離散度' },
+  { key: 'culturalCapitalInequality', label: '起始不平等・文化資本分布離散度' },
+  { key: 'socialCapitalInequality', label: '起始不平等・社會資本分布離散度' },
+  { key: 'regionalInequality', label: '起始不平等・居住安全分布離散度' },
+  { key: 'moneyToTimeStrength', label: '資源轉換・金錢換時間強度' },
+  { key: 'moneyToEducationStrength', label: '資源轉換・金錢換教育強度' },
+  { key: 'socialCapitalToOpportunityStrength', label: '資源轉換・社會資本換機會強度' },
+  { key: 'culturalCapitalToEducationStrength', label: '資源轉換・文化資本換教育強度' },
+  { key: 'careerFamilyConflict', label: '抉擇強度・事業與家庭衝突' },
+  { key: 'careerHealthConflict', label: '抉擇強度・事業與健康衝突' },
+  { key: 'careCareerConflict', label: '抉擇強度・照顧與事業衝突' },
+  { key: 'careDistributionEquality', label: '性別照顧分工不均程度' },
 ];
 const TOGGLE_FIELDS = [
   { key: 'enableFamilyCrisis', label: '是否開啟家庭危機事件' },
@@ -1876,6 +2065,13 @@ const TOGGLE_FIELDS = [
   { key: 'enableMultipleTestingLesson', label: '是否開啟 multiple testing 教學' },
   { key: 'enablePValueLesson', label: '是否開啟 p-value 教學' },
   { key: 'enableTimeRelevantEvents', label: '是否開啟時事事件包（EVENT 09–22）' },
+  { key: 'enableRecessionShock', label: '世代衝擊・經濟衰退' },
+  { key: 'enableHousingBoomShock', label: '世代衝擊・房價上漲' },
+  { key: 'enablePandemicShock', label: '世代衝擊・疫情' },
+  { key: 'enableAutomationShock', label: '世代衝擊・AI 自動化' },
+  { key: 'enableOffshoringShock', label: '世代衝擊・產業外移' },
+  { key: 'enableEducationExpansionShock', label: '世代衝擊・教育擴張' },
+  { key: 'enableWelfareReformShock', label: '世代衝擊・福利改革' },
 ];
 function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToDefault, onBack }) {
   return (
@@ -1926,6 +2122,26 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
                 {key === 'unemploymentSupport' && (
                   <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
                     以下六組「社會安全網」滑桿分別對應不同類型的風險（失業、醫療、教育、育兒、住房、長照）。每一組只會緩衝該類型事件造成的「負面」衝擊幅度，不會改變正面效果，也不會讓壞事不發生——它改變的是壞事發生時，一個人要獨自承擔多少。滑桿愈高，衝擊愈被制度分攤；滑桿愈低，衝擊愈全部落在個人與家庭身上。
+                  </p>
+                )}
+                {key === 'wealthInequality' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    以下五組「起始不平等」滑桿改變的是家庭背景的「分布離散程度」，不是平均值：50 為目前預設的分散程度，數值愈低代表這一代人的起跑點愈接近（壓縮），數值愈高代表贏家與輸家的起跑點差距被放大。
+                  </p>
+                )}
+                {key === 'moneyToTimeStrength' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    以下四組「資源轉換」滑桿控制某一類資本能多有效地換成另一種資源（例如金錢換時間、金錢換教育、社會資本換機會、文化資本換教育）。50 為目前預設換算率，數值愈高代表該類資本愈能「買到」對應資源，數值愈低代表該類資本愈難轉換。
+                  </p>
+                )}
+                {key === 'careerFamilyConflict' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    以下三組「抉擇強度」滑桿放大魚與熊掌不可兼得的後座力（事業與家庭、事業與健康、照顧與事業）。50 為目前預設強度，數值愈高代表玩家在這些兩難抉擇中，選擇某一邊要付出的代價愈大。
+                  </p>
+                )}
+                {key === 'careDistributionEquality' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    這個滑桿預設為 0（照顧責任由所有性別平均承擔，不改變現有平衡）。調高後，長照等「照顧型」事件的負面衝擊會更集中落在女性角色身上，男性角色承受的負面衝擊則相對變小，用來示範性別化的照顧分工如何轉譯為結構性落差。
                   </p>
                 )}
               </div>
