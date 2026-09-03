@@ -479,6 +479,11 @@ const DEFAULT_SETTINGS = {
   npcSampleSize: 999, alphaThreshold: 0.05,
   effortCoefficient: 0.3, familySESCoefficient: 0.22, culturalCapitalCoefficient: 0.1, socialCapitalCoefficient: 0.1,
   luckCoefficient: 0.08, randomNoise: 0.12,
+  /* 機會集合 Opportunity Set：0 = 機會分配極不平等（資源不夠的人，某些選項從一開始
+     就不會出現在他的人生選單上），100 = 機會近乎人人均等（幾乎每個人都能看到相同選單，
+     即使背景不同）。這個滑桿不會直接改動任何人的「成功分數」，改動的是「這一輪模擬
+     裡，各種背景的人到底看得到哪些選項」。 */
+  opportunityEquality: 60,
   enableFamilyCrisis: true, enablePoliticalCapital: true, enableMultipleTestingLesson: true, enablePValueLesson: true, enableTimeRelevantEvents: true,
 };
 const SETTINGS_BOUNDS = {
@@ -490,6 +495,7 @@ const SETTINGS_BOUNDS = {
   socialCapitalCoefficient: { min: 0, max: 1, step: 0.01 },
   luckCoefficient: { min: 0, max: 1, step: 0.01 },
   randomNoise: { min: 0, max: 0.5, step: 0.01 },
+  opportunityEquality: { min: 0, max: 100, step: 5 },
 };
 function clampSettings(settings) {
   const out = { ...settings };
@@ -502,19 +508,19 @@ function clampSettings(settings) {
   return out;
 }
 const PRESETS = {
-  meritocracy: { label: 'Meritocracy 功績社會', description: '努力效果非常強，家庭背景的影響相對較小。', settings: { effortCoefficient: 0.55, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.06, socialCapitalCoefficient: 0.06, luckCoefficient: 0.1, randomNoise: 0.15 } },
-  unequalOpportunity: { label: 'Unequal Opportunity 機會不均', description: '努力有效，但家庭資源明顯改變成功機率。', settings: { effortCoefficient: 0.28, familySESCoefficient: 0.32, culturalCapitalCoefficient: 0.12, socialCapitalCoefficient: 0.12, luckCoefficient: 0.08, randomNoise: 0.12 } },
-  highMobility: { label: 'High Mobility 高流動性', description: '家庭背景有影響，但教育可以明顯降低差距。', settings: { effortCoefficient: 0.32, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.08, luckCoefficient: 0.1, randomNoise: 0.14 } },
-  structuralAdvantage: { label: 'Structural Advantage 結構優勢累積', description: '家庭、文化、社會資本具有較強累積效果。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.3, culturalCapitalCoefficient: 0.18, socialCapitalCoefficient: 0.16, luckCoefficient: 0.06, randomNoise: 0.1 } },
-  lottery: { label: 'Lottery Society 純機運社會', description: '個人選擇的影響很小，多數結果由運氣與隨機波動決定。', settings: { effortCoefficient: 0.08, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.05, socialCapitalCoefficient: 0.05, luckCoefficient: 0.42, randomNoise: 0.3 } },
-  culturalCapitalSociety: { label: 'Cultural Capital Society 文化資本主導', description: '家庭的閱讀環境、教育期望等文化資本，比金錢更能預測結果。', settings: { effortCoefficient: 0.22, familySESCoefficient: 0.12, culturalCapitalCoefficient: 0.32, socialCapitalCoefficient: 0.1, luckCoefficient: 0.08, randomNoise: 0.12 } },
-  networkSociety: { label: 'Network Society 人脈社會', description: '「認識誰」比「會什麼」更重要，社會資本主導向上流動的機會。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.34, luckCoefficient: 0.08, randomNoise: 0.12 } },
+  meritocracy: { label: 'Meritocracy 功績社會', description: '努力效果非常強，家庭背景的影響相對較小；多數人也都看得到相似的人生選單。', settings: { effortCoefficient: 0.55, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.06, socialCapitalCoefficient: 0.06, luckCoefficient: 0.1, randomNoise: 0.15, opportunityEquality: 85 } },
+  unequalOpportunity: { label: 'Unequal Opportunity 機會不均', description: '努力有效，但家庭資源明顯改變成功機率，也明顯改變一個人「看得到哪些選項」。', settings: { effortCoefficient: 0.28, familySESCoefficient: 0.32, culturalCapitalCoefficient: 0.12, socialCapitalCoefficient: 0.12, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 25 } },
+  highMobility: { label: 'High Mobility 高流動性', description: '家庭背景有影響，但教育可以明顯降低差距，多數人生選項也仍然對大部分人開放。', settings: { effortCoefficient: 0.32, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.08, luckCoefficient: 0.1, randomNoise: 0.14, opportunityEquality: 70 } },
+  structuralAdvantage: { label: 'Structural Advantage 結構優勢累積', description: '家庭、文化、社會資本具有較強累積效果，資源不足的人有更多選項從一開始就不會出現。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.3, culturalCapitalCoefficient: 0.18, socialCapitalCoefficient: 0.16, luckCoefficient: 0.06, randomNoise: 0.1, opportunityEquality: 20 } },
+  lottery: { label: 'Lottery Society 純機運社會', description: '個人選擇的影響很小，多數結果由運氣與隨機波動決定；選單本身相對開放，但結果仍難預測。', settings: { effortCoefficient: 0.08, familySESCoefficient: 0.08, culturalCapitalCoefficient: 0.05, socialCapitalCoefficient: 0.05, luckCoefficient: 0.42, randomNoise: 0.3, opportunityEquality: 65 } },
+  culturalCapitalSociety: { label: 'Cultural Capital Society 文化資本主導', description: '家庭的閱讀環境、教育期望等文化資本，比金錢更能預測結果，也更容易決定誰看得到哪些機會。', settings: { effortCoefficient: 0.22, familySESCoefficient: 0.12, culturalCapitalCoefficient: 0.32, socialCapitalCoefficient: 0.1, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 35 } },
+  networkSociety: { label: 'Network Society 人脈社會', description: '「認識誰」比「會什麼」更重要，社會資本主導向上流動的機會，也主導誰能看到哪些機會。', settings: { effortCoefficient: 0.2, familySESCoefficient: 0.14, culturalCapitalCoefficient: 0.08, socialCapitalCoefficient: 0.34, luckCoefficient: 0.08, randomNoise: 0.12, opportunityEquality: 30 } },
 };
 const PRESET_ORDER = ['meritocracy', 'unequalOpportunity', 'highMobility', 'structuralAdvantage', 'lottery', 'culturalCapitalSociety', 'networkSociety'];
 /* 判斷目前 settings 是否剛好對應到某一組已命名的前提（容許極小誤差），
    用來在遊戲中提醒玩家「現在套用的是哪一種前提」；若老師用滑桿自訂過參數，
    則不會命中任何一組，回傳 null，由呼叫端顯示「自訂前提」的說明。 */
-const PREMISE_COEFF_KEYS = ['effortCoefficient', 'familySESCoefficient', 'culturalCapitalCoefficient', 'socialCapitalCoefficient', 'luckCoefficient', 'randomNoise'];
+const PREMISE_COEFF_KEYS = ['effortCoefficient', 'familySESCoefficient', 'culturalCapitalCoefficient', 'socialCapitalCoefficient', 'luckCoefficient', 'randomNoise', 'opportunityEquality'];
 function getActivePresetKey(settings) {
   if (!settings) return null;
   return PRESET_ORDER.find((key) => {
@@ -615,7 +621,7 @@ const CORE_EVENTS = [
       { id: 'give_up_trying', text: '不相信這句話，乾脆擺爛', visibleEffects: [{ stat: 'effort', delta: -10 }], hiddenEffects: [{ stat: 'education', delta: -4 }] },
     ] },
   { id: 'event_04_parents_network', stage: 'highSchool', title: '父母的人脈', description: '暑假快到了，你在思考要不要找一份實習或打工。', tags: ['core'], weight: 1,
-    conditions: [{ stat: 'family.socialCapital', op: 'gte', value: 60 }],
+    conditions: [{ stat: 'family.socialCapital', op: 'gte', value: 60, opportunityGated: true }],
     choices: [
       { id: 'accept_referral', text: '接受爸爸朋友的公司實習機會', visibleEffects: [{ stat: 'opportunity', delta: 12 }], hiddenEffects: [{ stat: 'socialCapital', delta: 5 }, { stat: 'culturalCapital', delta: 3 }] },
       { id: 'find_own', text: '自己去找機會', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'opportunity', delta: 4 }] },
@@ -630,7 +636,8 @@ const CORE_EVENTS = [
   { id: 'event_06_college_application', stage: 'highSchool', title: '大學申請', description: '申請表要求你：「請描述你的國際經驗與課外活動。」', tags: ['core'], weight: 1,
     choices: [
       { id: 'write_honestly', text: '如實描述自己目前擁有的經驗', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'opportunity', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '不同背景的你，履歷上會出現不同的出國經驗、社團、比賽、打工或家庭照顧經歷 — 這些都會自然地影響申請結果。' },
-      { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。' },
+      { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。',
+        unlock: { any: [{ stat: 'family.economicCapital', op: 'gte', value: 60, opportunityGated: true }] } },
       { id: 'rush_application', text: '隨便寫一寫交差，不想花太多心力', visibleEffects: [{ stat: 'effort', delta: -4 }], hiddenEffects: [{ stat: 'opportunity', delta: -4 }, { stat: 'education', delta: -2 }] },
     ] },
   { id: 'event_07_art_competition', stage: 'middleSchool', title: '全國學生繪畫比賽', description: '你參加了一場虛構的「全國學生繪畫比賽」。你的藝術能力很不錯，另一位參賽者能力略遜於你，但對方的家庭更熟悉比賽規則、能取得專業指導，也更懂得如何包裝作品理念。', tags: ['core'], weight: 1,
@@ -672,7 +679,12 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_28_exchange_or_work', stage: 'collegeOrWork', title: '交換學生，還是先打工賺錢', description: '學校釋出交換學生名額，但你也在想是不是該先打工存錢、累積經驗。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'apply_exchange', text: '申請交換學生', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'opportunity', delta: 4 }, { stat: 'ability', delta: 3 }] },
+      { id: 'apply_exchange', text: '申請交換學生', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'opportunity', delta: 4 }, { stat: 'ability', delta: 3 }],
+        unlock: { any: [
+          { stat: 'family.economicCapital', op: 'gte', value: 55, opportunityGated: true },
+          { stat: 'family.culturalCapital', op: 'gte', value: 55, opportunityGated: true },
+          { stat: 'ability', op: 'gte', value: 80 },
+        ] } },
       { id: 'work_part_time', text: '先打工，累積工作經驗與收入', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'economicCapital', delta: 2 }, { stat: 'socialCapital', delta: 2 }, { stat: 'ability', delta: 3 }] },
       { id: 'neither_apply', text: '兩個都沒申請，維持原本生活步調', visibleEffects: [], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
     ] },
@@ -786,7 +798,12 @@ const TIME_RELEVANT_EVENTS = [
   { id: 'event_21_exchange_program', stage: 'highSchool', title: '高中優異表現，出國研習一年', description: '因為在校成績或某項才能表現優異，學校推薦你申請一年期的海外交換研習計畫。名額有限，最後錄取與否還要看申請文件與面試。', tags: ['time-relevant'], weight: 1,
     conditions: [{ stat: 'ability', op: 'gte', value: 65 }],
     choices: [
-      { id: 'apply_fully', text: '全力準備申請（讀書計畫、語言檢定、面試練習）', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6 }, { stat: 'socialCapital', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '錄取不一定代表家裡有錢 — 但錄取後能運用的額外資源，確實會受到家庭資源影響。' },
+      { id: 'apply_fully', text: '全力準備申請（讀書計畫、語言檢定、面試練習）', visibleEffects: [{ stat: 'effort', delta: 15 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'culturalCapital', scaleFactor: 0.6 }, { stat: 'socialCapital', delta: 4, scaleBy: 'economicCapital', scaleFactor: 0.5 }], resultNarrative: '錄取不一定代表家裡有錢 — 但錄取後能運用的額外資源，確實會受到家庭資源影響。',
+        unlock: { any: [
+          { stat: 'family.economicCapital', op: 'gte', value: 60, opportunityGated: true },
+          { stat: 'family.culturalCapital', op: 'gte', value: 60, opportunityGated: true },
+          { stat: 'ability', op: 'gte', value: 88 },
+        ] } },
       { id: 'skip_it', text: '評估後決定不申請，把精力放在原本的升學規劃上', visibleEffects: [{ stat: 'effort', delta: 10 }] },
       { id: 'apply_halfheartedly', text: '心不甘情不願地申請，準備得很敷衍', visibleEffects: [{ stat: 'happiness', delta: -2 }], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
     ] },
@@ -940,6 +957,7 @@ function createPlayer(rngSeed, isNPC) {
     culturalCapital: family.culturalCapital, socialCapital: family.socialCapital, economicCapital: family.economicCapital,
     luck: clamp(rng.normal(50, 15), 0, 100), opportunity: clamp(rng.normal(50, 15), 0, 100), interpersonal: clamp(rng.normal(55, 15), 0, 100),
     successScore: 0, occupation: '學生', history: [], politicalCapital: family.politicalConnections, isNPC: !!isNPC,
+    hiddenOpportunities: [],
   };
 }
 function applyEffect(player, effect) {
@@ -962,38 +980,75 @@ function getStatValue(player, statPath) {
   if (statPath.startsWith('family.')) return player.family[statPath.replace('family.', '')];
   return player[statPath];
 }
-function checkCondition(player, condition) {
+/* 「機會集合 Opportunity Set」機制 —— condition.opportunityGated = true 的門檻，
+   會依教師設定的 opportunityEquality（0 = 機會極不平等，100 = 機會近乎人人均等）
+   線性縮放：equality 越高，門檻越低、越多人跨得過去；equality 越低，門檻維持原值，
+   只有資源足夠的人跨得過去。沒有標記 opportunityGated 的條件（例如能力、性別）
+   不受這個滑桿影響，維持原本固定的門檻。 */
+function scaledConditionThreshold(condition, settings) {
+  if (!condition.opportunityGated) return condition.value;
+  const raw = settings && settings.opportunityEquality != null ? settings.opportunityEquality : DEFAULT_SETTINGS.opportunityEquality;
+  const equality = clamp(raw, 0, 100);
+  return condition.value * (1 - equality / 100);
+}
+function checkCondition(player, condition, settings) {
   const value = getStatValue(player, condition.stat);
+  const threshold = scaledConditionThreshold(condition, settings);
   switch (condition.op) {
-    case 'gte': return value >= condition.value;
-    case 'lte': return value <= condition.value;
-    case 'gt': return value > condition.value;
-    case 'lt': return value < condition.value;
+    case 'gte': return value >= threshold;
+    case 'lte': return value <= threshold;
+    case 'gt': return value > threshold;
+    case 'lt': return value < threshold;
     case 'eq': return value === condition.value;
     default: return true;
   }
 }
-function eventMeetsConditions(player, event) {
+function eventMeetsConditions(player, event, settings) {
   if (!event.conditions || event.conditions.length === 0) return true;
-  return event.conditions.every((c) => checkCondition(player, c));
+  return event.conditions.every((c) => checkCondition(player, c, settings));
 }
-function pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant) {
+/* 選項層級的機會門檻：choice.unlock = { all: [...], any: [...] }。
+   all 內的條件必須全部成立；any 內的條件只要有一個成立即可（例如「家庭經濟資本足夠」
+   或「文化資本足夠」或「能力極高（獎學金／保送等价）」三選一）。沒有 unlock 欄位的
+   選項永遠可見。這個函式只判斷「看不看得到這個選項」，不影響選了之後的效果計算。 */
+function choiceIsUnlocked(player, choice, settings) {
+  if (!choice.unlock) return true;
+  const { all, any } = choice.unlock;
+  if (all && all.length > 0 && !all.every((c) => checkCondition(player, c, settings))) return false;
+  if (any && any.length > 0 && !any.some((c) => checkCondition(player, c, settings))) return false;
+  return true;
+}
+/* 依目前玩家狀態與教師設定，篩出這個事件「實際看得到」的選項。
+   若篩選後一個選項都不剩（極端設定下的邊界狀況），保留全部選項以避免遊戲卡死。 */
+function getUnlockedChoices(player, event, settings) {
+  const unlocked = (event.choices || []).filter((c) => choiceIsUnlocked(player, c, settings));
+  return unlocked.length > 0 ? unlocked : event.choices;
+}
+/* 記錄「這一次其實有選項被機會集合機制擋掉了」，供結局揭密時回顧使用——
+   讓學生事後看到：人生某些時刻，別人看到的選單，跟自己看到的選單並不一樣。 */
+function recordOpportunityGap(player, event, unlockedChoices) {
+  if (!event.choices || unlockedChoices.length >= event.choices.length) return player;
+  const hiddenChoices = event.choices.filter((c) => !unlockedChoices.some((u) => u.id === c.id));
+  const entry = { eventId: event.id, eventTitle: event.title, stage: event.stage, hiddenChoiceTexts: hiddenChoices.map((c) => c.text) };
+  return { ...player, hiddenOpportunities: [...(player.hiddenOpportunities || []), entry] };
+}
+function pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant, settings) {
   const candidates = pool.filter((e) => {
     if (e.stage !== stage) return false;
     if (usedEventIds.has(e.id)) return false;
     if (!enableTimeRelevant && e.tags.includes('time-relevant')) return false;
-    return eventMeetsConditions(player, e);
+    return eventMeetsConditions(player, e, settings);
   });
   if (candidates.length === 0) return null;
   const weights = candidates.map((e) => (e.weight != null ? e.weight : 1));
   return rng.weightedChoice(candidates, weights);
 }
-function pickStageEvent(pool, stage, indexInStage, player, rng, usedEventIds, enableTimeRelevant) {
+function pickStageEvent(pool, stage, indexInStage, player, rng, usedEventIds, enableTimeRelevant, settings) {
   if (stage === 'collegeOrWork' && indexInStage === 0 && !usedEventIds.has(MAJOR_SELECTION_EVENT_ID)) {
     const forced = pool.find((e) => e.id === MAJOR_SELECTION_EVENT_ID);
     if (forced) return forced;
   }
-  return pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant);
+  return pickEvent(pool, stage, player, rng, usedEventIds, enableTimeRelevant, settings);
 }
 function computeModifiedProbability(baseProbability, player, modifiers) {
   let p = baseProbability;
@@ -1123,17 +1178,23 @@ function replaySession(seed, settings, pool, history) {
   for (const stage of LIFE_STAGES) {
     player = { ...player, stage, age: LIFE_STAGE_START_AGE[stage] };
     for (let i = 0; i < EVENTS_PER_STAGE; i++) {
-      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
+      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents, settings);
       if (!event) break;
       usedEventIds.add(event.id);
       if (historyIndex < history.length) {
         const record = history[historyIndex];
+        /* 「機會集合」機制：先算出玩家當下實際看得到的選項，記錄下有沒有選項被擋掉
+           （供結局揭密回顧），但選項查找仍用完整清單，確保就算之後教師調整了設定，
+           玩家過去已經做過的選擇依然能正確重播。 */
+        const unlockedChoices = getUnlockedChoices(player, event, settings);
+        player = recordOpportunityGap(player, event, unlockedChoices);
         const choice = event.choices.find((c) => c.id === record.choiceId) || event.choices[0];
         const result = applyChoice(player, event, choice, eventsRng);
         player = result.player;
         historyIndex += 1;
       } else {
-        return { player, nextEvent: event, done: false };
+        const unlockedChoices = getUnlockedChoices(player, event, settings);
+        return { player, nextEvent: { ...event, choices: unlockedChoices }, done: false };
       }
     }
   }
@@ -1149,10 +1210,14 @@ function simulateFullLife(options) {
   for (const stage of LIFE_STAGES) {
     player = { ...player, stage, age: LIFE_STAGE_START_AGE[stage] };
     for (let i = 0; i < perStage; i++) {
-      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents);
+      const event = pickStageEvent(pool, stage, i, player, eventsRng, usedEventIds, settings.enableTimeRelevantEvents, settings);
       if (!event) break;
       usedEventIds.add(event.id);
-      const choice = selector(player, event, eventsRng);
+      /* NPC／學生角色都活在同一個「機會集合」制度下：能被選到的選項，
+         一樣先經過機會門檻篩選，這樣統計實驗室看到的樣本才會真實反映
+         這一輪社會的機會結構，而不只是把所有人視為看得到相同選單。 */
+      const visibleEvent = { ...event, choices: getUnlockedChoices(player, event, settings) };
+      const choice = selector(player, visibleEvent, eventsRng);
       const result = applyChoice(player, event, choice, eventsRng);
       player = result.player;
     }
@@ -1710,6 +1775,7 @@ const NUMERIC_FIELDS = [
   { key: 'socialCapitalCoefficient', label: '社會資本係數' },
   { key: 'luckCoefficient', label: '運氣係數' },
   { key: 'randomNoise', label: '隨機雜訊' },
+  { key: 'opportunityEquality', label: '機會平等程度（Opportunity Equality）' },
 ];
 const TOGGLE_FIELDS = [
   { key: 'enableFamilyCrisis', label: '是否開啟家庭危機事件' },
@@ -1751,6 +1817,11 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
                 <input type="range" min={bound.min} max={bound.max} step={bound.step} value={value}
                   onChange={(e) => { const o = {}; o[key] = Number(e.target.value); updateSettings(o); }} className="w-full range-slider" />
                 <div className="flex justify-between text-xs text-inkFaint font-mono"><span>{bound.min}</span><span>{bound.max}</span></div>
+                {key === 'opportunityEquality' && (
+                  <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                    這個滑桿不會直接改變任何人的分數。它控制的是「不同家庭背景的人，是否看得到相同的人生選項」——例如某些出國、進修或內部推薦的機會，在低機會平等的社會裡，可能需要家庭資源或極高能力才會出現在選單上；在高機會平等的社會裡，這些選項則對多數人開放。
+                  </p>
+                )}
               </div>
             );
           })}
@@ -1851,6 +1922,23 @@ function GameScreen({ player, nextEvent, phase, settings, choose, goToAttributio
             <StatCell label="家庭年收入（估計）" value={formatCurrency(fam.householdIncome)} />
           </div>
           <p className="text-xs text-inkFaint mb-6 leading-relaxed">你在遊戲一開始的「教育」分數，其實不是每個人都從 0 起跑：父母學歷、幼年陪伴程度與家庭文化資本，會先給你一段不算大、但確實存在的起跑點差距，之後才由你自己的選擇持續加總。</p>
+          <h3 className="text-sm text-ink font-medium mb-3">你的機會集合 Opportunity Set</h3>
+          {player.hiddenOpportunities && player.hiddenOpportunities.length > 0 ? (
+            <React.Fragment>
+              <p className="text-sm text-inkFaint mb-3 leading-relaxed">在你的人生中，至少有 {player.hiddenOpportunities.length} 個關卡，其實有選項因為家庭資源或能力門檻而沒有出現在你的選單上——你當時完全不知道它們存在，也就無從選擇：</p>
+              <div className="flex flex-col gap-2 mb-4">
+                {player.hiddenOpportunities.map((gap, i) => (
+                  <div key={i} className="rounded-lg bg-surface2 border border-borderc px-4 py-3">
+                    <div className="text-sm text-ink font-medium mb-1">{gap.eventTitle}</div>
+                    <div className="text-xs text-inkFaint">未出現在你選單上的選項：{gap.hiddenChoiceTexts.join('、')}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm text-inkFaint mb-6 leading-relaxed">這正是「機會集合」想讓你看到的重點：<span className="text-ink">有些人生差異，不是因為做了不同的選擇，而是因為當時根本沒有相同的選項。</span></p>
+            </React.Fragment>
+          ) : (
+            <p className="text-sm text-inkFaint mb-6 leading-relaxed">在這一輪模擬中，你在每一個關卡都看到了完整的選項清單——但這不代表每個人都是如此：換一種「機會平等程度」設定，同樣的家庭背景可能會讓某些選項從選單上消失。</p>
+          )}
           <h3 className="text-sm text-ink font-medium mb-3">貫穿你整個人生的因素</h3>
           <BarChart data={hiddenFactors} />
           <button onClick={goToAnalysis} className="btn-primary w-full mt-6 py-3.5">進入社會科學解密</button>
