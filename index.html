@@ -46,6 +46,9 @@
 
   .font-display { font-family: 'Noto Serif TC', 'Source Han Serif TC', serif; text-wrap: balance; }
   .font-mono { font-family: 'JetBrains Mono', ui-monospace, 'Courier New', monospace; }
+  /* 避免中文內文段落結尾留下孤字（單一字元獨佔一行）。text-wrap: pretty 會在瀏覽器
+     支援時採用較佳的換行演算法；同時搭配 CJK 專用的斷行/孤行控制屬性做為後備。 */
+  p, li { text-wrap: pretty; overflow-wrap: break-word; line-break: strict; widows: 2; orphans: 2; }
   .tabular { font-variant-numeric: tabular-nums; }
 
   ::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -447,8 +450,12 @@ const PARENT_IN_POLITICS_BASE_PROBABILITY = 0.05;
 
 const PARENT_OCCUPATIONS = ['工廠作業員', '計程車司機', '小吃店老闆', '便利商店店員', '中小企業職員', '公務人員', '國小教師', '護理師', '工程師', '會計師', '律師', '醫師', '大學教授', '中小企業主', '上市公司主管', '農漁民', '自營商', '幕僚', '黨工', '地方民代'];
 const PLAYER_OCCUPATIONS = ['工程師', '教師', '護理師', '公務人員', '業務員', '自營商', '會計師', '律師', '醫師', '大學教授', '研究員', '設計師', '內容創作者', '社工', '廚師', '幕僚', '黨工', '地方民代', '公司主管', '創業者'];
-/* 職業薪資／退休金模型 —— 相對倍率參考行政院主計總處統計與 104 人力銀行《2025 各行業薪資排名》
-   （電子資訊、金融保險等產業年薪明顯高於服務業、社工等，此處以相對倍率呈現，非即時薪資數字）。
+/* 職業薪資／退休金模型 —— 相對倍率參考行政院主計總處《職類別薪資調查》各職類總薪資排名，
+   以及 104 人力銀行《2025 各行業薪資排名》（詳見結局頁與最後一頁的參考來源）。
+   主計總處資料顯示，總薪資最高的職類集中在機師／高階主管（總經理及執行長）／醫師／
+   專利工程師等少數職類，其餘專業職類（律師、會計師、一般工程師）居次，
+   服務／教育／社福職類則明顯偏低——此處的相對倍率依此排序校準，
+   但採全職業的「平均」倍率而非表列的頂尖前 20 名數字，避免模型整體被極端值撐高。
    sector: 'public' 代表享有公部門式的退休制度（月退俸），'private' 則對應勞保＋勞退新制的較低替代率。 */
 const OCCUPATION_PROFILES = {
   '工程師': { incomeMultiplier: 1.5, sector: 'private' },
@@ -458,7 +465,7 @@ const OCCUPATION_PROFILES = {
   '業務員': { incomeMultiplier: 0.95, sector: 'private' },
   '自營商': { incomeMultiplier: 0.9, sector: 'private' },
   '會計師': { incomeMultiplier: 1.3, sector: 'private' },
-  '律師': { incomeMultiplier: 1.6, sector: 'private' },
+  '律師': { incomeMultiplier: 1.35, sector: 'private' },
   '醫師': { incomeMultiplier: 2.2, sector: 'private' },
   '大學教授': { incomeMultiplier: 1.4, sector: 'public' },
   '研究員': { incomeMultiplier: 1.3, sector: 'public' },
@@ -469,7 +476,7 @@ const OCCUPATION_PROFILES = {
   '幕僚': { incomeMultiplier: 0.9, sector: 'private' },
   '黨工': { incomeMultiplier: 0.85, sector: 'private' },
   '地方民代': { incomeMultiplier: 1.1, sector: 'private' },
-  '公司主管': { incomeMultiplier: 1.6, sector: 'private' },
+  '公司主管': { incomeMultiplier: 1.9, sector: 'private' },
   '創業者': { incomeMultiplier: 1.2, sector: 'private' },
 };
 const DEFAULT_OCCUPATION_PROFILE = { incomeMultiplier: 1, sector: 'private' };
@@ -943,6 +950,27 @@ function computeSuccessScore(inputs, settings, rng) {
   const raw = effortEffect + abilityEffect + educationEffect + economicEffect + culturalEffect + socialEffect + opportunityEffect + luckEffect + interaction + randomError;
   return clamp(raw, 0, 100);
 }
+/* 退休金試算 —— 私部門採「勞保老年年金＋勞退新制」概算，兩者都有法定「投保／提繳工資」
+   上限，所以月薪越高，超過上限的部分完全不計入退休金試算，替代率（退休金／薪資）反而
+   隨所得升高而下降。比例校準自銀行公開試算範例（月薪 30,300 元、年資 40 年
+   → 勞保月領 18,786 元＋勞退月領 10,843 元，合計 29,629 元，
+   來源：https://bank.sinopac.com/sinopacBT/webevents/ibrain/blogs_detail_011.html）。
+   公部門（教師／公務人員／教授／研究員）採月退俸概算，年金改革後所得替代率下降，
+   同樣設定一個合理上限，避免退休金隨模擬收入無上限成長。 */
+const LABOR_INSURANCE_WAGE_CAP = 45800; // 勞保投保薪資分級表最高級距（近似值）
+const LABOR_PENSION_WAGE_CAP = 45800;   // 勞退月提繳工資的試算基礎（保守估計）
+const PUBLIC_PENSION_WAGE_CAP = 100000; // 公部門月退俸計算基礎上限
+function estimatePensionMonthly(monthlyIncome, sector) {
+  if (sector === 'public') {
+    const base = Math.min(monthlyIncome, PUBLIC_PENSION_WAGE_CAP);
+    return Math.round((base * 0.55) / 1000) * 1000;
+  }
+  const insuranceBase = Math.min(monthlyIncome, LABOR_INSURANCE_WAGE_CAP);
+  const pensionBase = Math.min(monthlyIncome, LABOR_PENSION_WAGE_CAP);
+  const laborInsurancePension = insuranceBase * 0.62; // ≈18,786 / 30,300
+  const laborNewPension = pensionBase * 0.358; // ≈10,843 / 30,300
+  return Math.round((laborInsurancePension + laborNewPension) / 1000) * 1000;
+}
 function deriveFinalOutcomes(player, occupationProfile) {
   const profile = occupationProfile || DEFAULT_OCCUPATION_PROFILE;
   const incomeBase = 400000 + player.successScore * 45000 + player.education * 3000;
@@ -950,23 +978,27 @@ function deriveFinalOutcomes(player, occupationProfile) {
   const wealthBase = income * 6 + player.family.economicCapital * 60000 + player.successScore * 30000;
   const wealth = Math.round(wealthBase / 10000) * 10000;
   const careerPrestige = clamp(player.successScore * 0.6 + player.education * 0.3 + player.socialCapital * 0.1);
-  /* 退休金：公部門（教師／公務人員／教授／研究員）享較高所得替代率的月退俸；
-     私部門則以勞保老年年金＋勞退新制估算，替代率明顯較低 —— 呈現台灣現行退休制度的雙軌落差。 */
-  const pensionReplacementRate = profile.sector === 'public' ? 0.68 : 0.35;
-  const pensionMonthly = Math.round(((income / 12) * pensionReplacementRate) / 1000) * 1000;
+  const pensionMonthly = estimatePensionMonthly(income / 12, profile.sector);
   return { income, wealth, careerPrestige, pensionMonthly };
 }
 function finalizePlayer(player, settings, rng) {
+  const majorRecord = player.history.find((h) => h.eventId === MAJOR_SELECTION_EVENT_ID);
+  const majorProfile = majorRecord ? MAJOR_PROFILES[majorRecord.choiceId] : null;
+  const attendedCollege = !!majorProfile && majorRecord.choiceId !== 'skip_college';
+  /* 教育分數是由許多小事件的正負變化累加而成，可能因為連續不順利而落在較低區間。
+     但只要玩家在「選填科系」事件中實際選擇了一個科系（而非「不升學」），
+     就代表這個人生設定已經完成大學學業，因此把教育分數墊高到至少跨過「大學畢業」
+     門檻，避免出現「選了科系、結局卻顯示國中肄業」這種與前面選擇互相矛盾的情況。 */
+  const educationForScoring = attendedCollege ? Math.max(player.education, 58) : player.education;
+  const playerForScoring = attendedCollege ? { ...player, education: educationForScoring } : player;
   const successScore = computeSuccessScore({
-    effort: player.effort, ability: player.ability, education: player.education,
-    economicCapital: player.economicCapital, culturalCapital: player.culturalCapital,
-    socialCapital: player.socialCapital, luck: player.luck, opportunity: player.opportunity,
+    effort: playerForScoring.effort, ability: playerForScoring.ability, education: playerForScoring.education,
+    economicCapital: playerForScoring.economicCapital, culturalCapital: playerForScoring.culturalCapital,
+    socialCapital: playerForScoring.socialCapital, luck: playerForScoring.luck, opportunity: playerForScoring.opportunity,
   }, settings, rng);
-  const withSuccess = { ...player, successScore };
+  const withSuccess = { ...playerForScoring, successScore };
   const politicsRecord = withSuccess.history.find((h) => h.eventId === 'event_22_politics');
   const wentIntoPolitics = politicsRecord && politicsRecord.choiceId === 'engage_politics';
-  const majorRecord = withSuccess.history.find((h) => h.eventId === MAJOR_SELECTION_EVENT_ID);
-  const majorProfile = majorRecord ? MAJOR_PROFILES[majorRecord.choiceId] : null;
   let occupation;
   if (wentIntoPolitics) {
     occupation = rng.randomChoice(['幕僚', '黨工', '地方民代']);
@@ -1329,7 +1361,7 @@ function EndingCard({ player }) {
         <StatCell label="幸福" value={Math.round(player.happiness) + ' / 100'} />
         <StatCell label="社會影響力" value={Math.round(player.careerPrestige) + ' / 100'} />
       </div>
-      <p className="text-[11px] text-inkFaint mt-4 leading-relaxed">職業薪資倍率與退休金替代率為簡化模型，方向參考行政院主計總處統計與 104 人力銀行薪資排名，並非即時薪資數字。</p>
+      <p className="text-[11px] text-inkFaint mt-4 leading-relaxed">職業薪資倍率參考行政院主計總處《職類別薪資調查》與 104 人力銀行薪資排名的相對排序；退休金採勞保老年年金＋勞退新制（或公部門月退俸）簡化試算，並設有投保薪資上限，因此收入越高、替代率越低。以上皆為簡化教學模型，並非即時薪資或實際退休金數字，詳細來源請見最後一頁「參考文獻與延伸閱讀」。</p>
     </div>
   );
 }
@@ -1652,6 +1684,8 @@ const ONLINE_RESOURCES = [
   { label: '台灣社會變遷基本調查（Taiwan Social Change Survey）', url: 'https://tscs.sinica.edu.tw/' },
   { label: 'American Statistical Association — Statement on p-Values', url: 'https://www.amstat.org/asa/files/pdfs/p-valuestatement.pdf' },
   { label: '104 職場力｜2025 各行業薪資排名（本遊戲職業薪資倍率的參考來源）', url: 'https://blog.104.com.tw/2025-taiwan-salary/' },
+  { label: '行政院主計總處｜職類別薪資調查（各職類總薪資排名，本遊戲職業薪資倍率相對排序的參考來源）', url: 'https://earnings.dgbas.gov.tw/' },
+  { label: '永豐銀行 i 理財｜退休金試算與勞保勞退所得替代率說明（本遊戲退休金公式的參考來源）', url: 'https://bank.sinopac.com/sinopacBT/webevents/ibrain/blogs_detail_011.html' },
 ];
 function FinalScreen({ onRestart, onSameSeed, onNewLife }) {
   return (
