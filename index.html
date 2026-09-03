@@ -1121,8 +1121,15 @@ function tradeoffMultiplier(strength0to100) {
   const s = clamp(strength0to100, 0, 100);
   return TRADEOFF_MIN_MULTIPLIER + (s / 100) * (TRADEOFF_MAX_MULTIPLIER - TRADEOFF_MIN_MULTIPLIER);
 }
+/* 努力分數的原始事件設計（每個選項 delta 值）本來是照「這個選擇看起來多用力」的直覺
+   去配的，但整輪玩下來（12 個人生階段 × 2 個事件）疊加起來，多數玩家與 NPC 的努力分數
+   很快就會衝頂到 100、卡在天花板——散佈圖右側會擠成一條線，「努力」這個變項的變異
+   幾乎消失，反而讓統計練習失真。EFFORT_DELTA_SCALE 把每一次努力變動統一縮小，
+   讓「持續選擇高努力選項」仍然能逼近 100（呈現「努力真的有累積效果」），但一般隨機
+   選擇的人生會落在中段、有足夠的分散，「刻意擺爛」的人生也會明顯偏低。 */
+const EFFORT_DELTA_SCALE = 0.4;
 function applyEffect(player, effect, settings) {
-  let delta = effect.delta;
+  let delta = effect.stat === 'effort' ? effect.delta * EFFORT_DELTA_SCALE : effect.delta;
   if (effect.scaleBy) {
     const scaleStat = player[effect.scaleBy] != null ? player[effect.scaleBy] : 50;
     let factor = effect.scaleFactor != null ? effect.scaleFactor : 1;
@@ -1534,19 +1541,19 @@ function playerToDatasetRow(player) {
    看到的相關與迴歸係數也可能跟著改變。財富（wealth）尺度與其他 0–100 分數不同，
    所以在使用前會先在資料集內做百分位排名正規化。 */
 const SUCCESS_OPERATIONALIZATIONS = [
-  { key: 'default', label: '綜合成功分數（預設）', getValue: (d) => d.success },
-  { key: 'wealth', label: '財富（依樣本百分位排名正規化）', getValue: (d) => d.wealthPercentile },
-  { key: 'career', label: '職涯聲望', getValue: (d) => d.careerPrestige },
-  { key: 'happiness', label: '幸福感', getValue: (d) => d.happiness },
-  { key: 'health', label: '健康', getValue: (d) => d.health },
-  { key: 'custom', label: '自訂成功指數（財富＋職涯＋幸福＋健康平均）', getValue: (d) => (d.wealthPercentile + d.careerPrestige + d.happiness + d.health) / 4 },
+  { key: 'default', label: '綜合成功分數（預設）', definition: '把努力、能力、教育、家庭資源、社會資本、運氣等因素依教師設定的權重加總而成的 0–100 綜合分數，是遊戲內建、最接近「整體人生過得如何」的單一指標。', getValue: (d) => d.success },
+  { key: 'wealth', label: '財富（依樣本百分位排名正規化）', definition: '只看這個人在「這一批模擬人口」裡財富排第幾百分位，不看能力、教育或其他面向——只要有錢，就算成功。', getValue: (d) => d.wealthPercentile },
+  { key: 'career', label: '職涯聲望', definition: '只看職業的社會聲望高低，不管賺多少錢或過得快不快樂。', getValue: (d) => d.careerPrestige },
+  { key: 'happiness', label: '幸福感', definition: '只看這個人主觀感受到的幸福程度，跟財富、地位、教育都不直接掛勾。', getValue: (d) => d.happiness },
+  { key: 'health', label: '健康', definition: '只看身心健康狀態，忽略財富、地位與幸福感。', getValue: (d) => d.health },
+  { key: 'custom', label: '自訂成功指數（財富＋職涯＋幸福＋健康平均）', definition: '把財富排名、職涯聲望、幸福感、健康四項簡單平均，示範「換一種組合方式定義成功，故事就會不一樣」。', getValue: (d) => (d.wealthPercentile + d.careerPrestige + d.happiness + d.health) / 4 },
 ];
 const EFFORT_OPERATIONALIZATIONS = [
-  { key: 'default', label: '總投入時間（預設，effort 累積分數）', getValue: (d) => d.effort },
-  { key: 'work', label: '工作投入（effort 加權能力展現）', getValue: (d) => d.effort * 0.7 + d.ability * 0.3 },
-  { key: 'study', label: '學習投入（effort 加權教育投入）', getValue: (d) => d.effort * 0.7 + d.education * 0.3 },
-  { key: 'discipline', label: '自律程度（effort 加權情緒穩定度）', getValue: (d) => d.effort * 0.7 + d.happiness * 0.3 },
-  { key: 'custom', label: '自訂 Effort Index（effort、ability、education 平均）', getValue: (d) => (d.effort + d.ability + d.education) / 3 },
+  { key: 'default', label: '總投入時間（預設，effort 累積分數）', definition: '玩家在每一次人生選擇中投入心力的累積分數（0–100）——選擇「認真讀書」「主動請教前輩」等選項會提高，「擺爛」「裸辭」等選項會降低。', getValue: (d) => d.effort },
+  { key: 'work', label: '工作投入（effort 加權能力展現）', definition: '努力累積分數再依「能力展現」加權，比較貼近「在職場上看得到的投入程度」。', getValue: (d) => d.effort * 0.7 + d.ability * 0.3 },
+  { key: 'study', label: '學習投入（effort 加權教育投入）', definition: '努力累積分數再依「教育投入」加權，比較貼近「在學業上看得到的投入程度」。', getValue: (d) => d.effort * 0.7 + d.education * 0.3 },
+  { key: 'discipline', label: '自律程度（effort 加權情緒穩定度）', definition: '努力累積分數再依「情緒穩定度」加權，示範「自律」除了投入本身，也包含能不能穩定維持狀態。', getValue: (d) => d.effort * 0.7 + d.happiness * 0.3 },
+  { key: 'custom', label: '自訂 Effort Index（effort、ability、education 平均）', definition: '把努力、能力、教育三項簡單平均，示範「換一種組合方式定義努力，故事就會不一樣」。', getValue: (d) => (d.effort + d.ability + d.education) / 3 },
 ];
 function resolveOperationalization(dataset, key, list) {
   const def = list.find((item) => item.key === key) || list[0];
@@ -1696,7 +1703,7 @@ function LeverHero() {
 }
 
 function ScatterChart({ data, xLabel, yLabel, regressionLine }) {
-  const W = 640, H = 320, PAD_L = 50, PAD_B = 36, PAD_T = 14, PAD_R = 14;
+  const W = 680, H = 380, PAD_L = 62, PAD_B = 50, PAD_T = 20, PAD_R = 20;
   const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
   const xs = data.map((d) => d.x), ys = data.map((d) => d.y);
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
@@ -1711,25 +1718,25 @@ function ScatterChart({ data, xLabel, yLabel, regressionLine }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
       {yTickVals.map((v, i) => (
         <g key={'y' + i}>
-          <line x1={PAD_L} x2={W - PAD_R} y1={yScale(v)} y2={yScale(v)} stroke="#22262f" strokeWidth="1" />
-          <text x={PAD_L - 8} y={yScale(v) + 3} textAnchor="end" fontSize="10" fill="#5b6072" fontFamily="'JetBrains Mono',monospace">{Math.round(v)}</text>
+          <line x1={PAD_L} x2={W - PAD_R} y1={yScale(v)} y2={yScale(v)} stroke="#2a2f3d" strokeWidth="1" />
+          <text x={PAD_L - 10} y={yScale(v) + 4} textAnchor="end" fontSize="14" fill="#9296a8" fontFamily="'JetBrains Mono',monospace">{Math.round(v)}</text>
         </g>
       ))}
       {xTickVals.map((v, i) => (
-        <text key={'x' + i} x={xScale(v)} y={H - PAD_B + 18} textAnchor="middle" fontSize="10" fill="#5b6072" fontFamily="'JetBrains Mono',monospace">{Math.round(v)}</text>
+        <text key={'x' + i} x={xScale(v)} y={H - PAD_B + 24} textAnchor="middle" fontSize="14" fill="#9296a8" fontFamily="'JetBrains Mono',monospace">{Math.round(v)}</text>
       ))}
-      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H - PAD_B} stroke="#3a4152" />
-      <line x1={PAD_L} y1={H - PAD_B} x2={W - PAD_R} y2={H - PAD_B} stroke="#3a4152" />
-      {sample.map((d, i) => (<circle key={i} cx={xScale(d.x)} cy={yScale(d.y)} r={2.3} fill="#4ba3a3" opacity="0.55" />))}
+      <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={H - PAD_B} stroke="#3a4152" strokeWidth="1.5" />
+      <line x1={PAD_L} y1={H - PAD_B} x2={W - PAD_R} y2={H - PAD_B} stroke="#3a4152" strokeWidth="1.5" />
+      {sample.map((d, i) => (<circle key={i} cx={xScale(d.x)} cy={yScale(d.y)} r={4} fill="#6fd0d0" fillOpacity="0.8" stroke="#0d0f14" strokeWidth="0.5" />))}
       {regressionLine && (
         <line
           x1={xScale(xMin)} y1={yScale(regressionLine.intercept + regressionLine.slope * xMin)}
           x2={xScale(xMax)} y2={yScale(regressionLine.intercept + regressionLine.slope * xMax)}
-          stroke="#d4a84c" strokeWidth="2.5"
+          stroke="#d4a84c" strokeWidth="3.5"
         />
       )}
-      <text x={(PAD_L + W - PAD_R) / 2} y={H - 2} textAnchor="middle" fontSize="11" fill="#9296a8">{xLabel}</text>
-      <text x={12} y={(PAD_T + H - PAD_B) / 2} textAnchor="middle" fontSize="11" fill="#9296a8" transform={`rotate(-90 12 ${(PAD_T + H - PAD_B) / 2})`}>{yLabel}</text>
+      <text x={(PAD_L + W - PAD_R) / 2} y={H - 6} textAnchor="middle" fontSize="15" fill="#e7e8ee">{xLabel}</text>
+      <text x={16} y={(PAD_T + H - PAD_B) / 2} textAnchor="middle" fontSize="15" fill="#e7e8ee" transform={`rotate(-90 16 ${(PAD_T + H - PAD_B) / 2})`}>{yLabel}</text>
     </svg>
   );
 }
@@ -2350,6 +2357,9 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
                 className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
                 {SUCCESS_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
               </select>
+              <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                {(SUCCESS_OPERATIONALIZATIONS.find((op) => op.key === settings.successOperationalization) || SUCCESS_OPERATIONALIZATIONS[0]).definition}
+              </p>
             </div>
             <div>
               <div className="text-sm text-ink mb-1.5">Effort Operationalization（努力的操作化）</div>
@@ -2357,6 +2367,9 @@ function TeacherScreen({ settings, updateSettings, applyPreset, resetSettingsToD
                 className="w-full bg-surface2 border border-borderc rounded px-3 py-2 text-sm text-ink">
                 {EFFORT_OPERATIONALIZATIONS.map((op) => (<option key={op.key} value={op.key}>{op.label}</option>))}
               </select>
+              <p className="text-xs text-inkFaint mt-1.5 leading-relaxed">
+                {(EFFORT_OPERATIONALIZATIONS.find((op) => op.key === settings.effortOperationalization) || EFFORT_OPERATIONALIZATIONS[0]).definition}
+              </p>
             </div>
           </div>
         </section>
@@ -2423,7 +2436,7 @@ function PreviewSimulationPanel({ settings }) {
           <p className="text-xs text-inkFaint leading-relaxed">
             社會流動率：家庭背景百分位與最終成功百分位落在不同四分位的比例，愈高代表這個社會裡「起點不等於終點」的情形愈常見。收入不平等以財富的 P90/P10 比值呈現，數值愈大代表頂層與底層財富差距愈懸殊。健康／幸福差距則比較家庭背景前 25% 與後 25% 兩群人的平均值差異。
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-6">
             <div>
               <div className="text-xs text-inkFaint mb-1.5 font-mono">Family SES × Success</div>
               <ScatterChart data={state.result.scatterFamilySES} xLabel="家庭背景 Family SES" yLabel="成功 Success" />
@@ -2701,7 +2714,11 @@ function AnalysisScreen({ seed, player, npcDataset, selfAttribution, settings, r
 
       {step === 'scatterGuess' && (
         <Panel eyebrow="社會科學解密 · 觀察資料">
-          <h2 className="font-display text-lg text-ink mb-4">努力的人比較成功嗎？</h2>
+          <h2 className="font-display text-lg text-ink mb-3">努力的人比較成功嗎？</h2>
+          <div className="rounded-lg bg-surface2 border border-borderc px-3 py-2.5 mb-4 space-y-1.5">
+            <p className="text-xs text-inkFaint leading-relaxed"><span className="text-teal font-medium">「{bundle.effortOp.def.label}」</span>{bundle.effortOp.def.definition}</p>
+            <p className="text-xs text-inkFaint leading-relaxed"><span className="text-brass font-medium">「{bundle.successOp.def.label}」</span>{bundle.successOp.def.definition}</p>
+          </div>
           <ScatterChart data={bundle.scatterData} xLabel={bundle.effortOp.def.label} yLabel={bundle.successOp.def.label} />
           <p className="text-sm text-inkDim mt-4 mb-3">看起來兩者有關係嗎？</p>
           <div className="flex gap-3 mb-1">
