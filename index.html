@@ -35,6 +35,15 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* Mobile readability: Tailwind's text-* utilities are rem-based, so bumping
+     the root size scales every font size, spacing-in-rem and icon proportionally. */
+  @media (max-width: 480px) {
+    html { font-size: 19px; }
+  }
+  @media (min-width: 481px) and (max-width: 640px) {
+    html { font-size: 17px; }
+  }
+
   .font-display { font-family: 'Noto Serif TC', 'Source Han Serif TC', serif; text-wrap: balance; }
   .font-mono { font-family: 'JetBrains Mono', ui-monospace, 'Courier New', monospace; }
   .tabular { font-variant-numeric: tabular-nums; }
@@ -490,6 +499,7 @@ const CORE_EVENTS = [
   { id: 'event_06_college_application', stage: 'highSchool', title: '大學申請', description: '申請表要求你：「請描述你的國際經驗與課外活動。」', tags: ['core'], weight: 1,
     choices: [
       { id: 'write_honestly', text: '如實描述自己目前擁有的經驗', visibleEffects: [{ stat: 'effort', delta: 8 }], hiddenEffects: [{ stat: 'education', delta: 5, scaleBy: 'culturalCapital', scaleFactor: 0.5 }, { stat: 'opportunity', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.4 }], resultNarrative: '不同背景的你，履歷上會出現不同的出國經驗、社團、比賽、打工或家庭照顧經歷 — 這些都會自然地影響申請結果。' },
+      { id: 'hire_consultant', text: '請升學顧問或家教協助修飾申請文件', visibleEffects: [{ stat: 'effort', delta: 4 }], hiddenEffects: [{ stat: 'opportunity', delta: 6, scaleBy: 'economicCapital', scaleFactor: 0.7 }, { stat: 'culturalCapital', delta: 2 }], resultNarrative: '能不能負擔升學顧問的費用，本身就跟家庭經濟資本高度相關。' },
     ] },
   { id: 'event_07_art_competition', stage: 'middleSchool', title: '全國學生繪畫比賽', description: '你參加了一場虛構的「全國學生繪畫比賽」。你的藝術能力很不錯，另一位參賽者能力略遜於你，但對方的家庭更熟悉比賽規則、能取得專業指導，也更懂得如何包裝作品理念。', tags: ['core'], weight: 1,
     conditions: [{ stat: 'ability', op: 'gte', value: 55 }],
@@ -510,7 +520,9 @@ const CORE_EVENTS = [
     ] },
   { id: 'event_23_toddler_stimulation', stage: 'toddler', title: '幼兒期的啟蒙', description: '你還太小，記不清細節，但家裡的日常會慢慢形塑你之後的樣子。', tags: ['core'], weight: 1,
     choices: [
-      { id: 'grow_up', text: '在家人的陪伴下慢慢長大', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'health', delta: 2 }] },
+      { id: 'grow_up', text: '在家人親自陪伴下慢慢長大，常有人讀故事書給你聽', visibleEffects: [{ stat: 'happiness', delta: 3 }], hiddenEffects: [{ stat: 'culturalCapital', delta: 3, scaleBy: 'economicCapital', scaleFactor: 0.6 }, { stat: 'health', delta: 2 }] },
+      { id: 'busy_household', text: '家裡忙於生計，你大多時候自己打發時間', visibleEffects: [{ stat: 'happiness', delta: 1 }], hiddenEffects: [{ stat: 'stress', delta: 2 }],
+        resultNarrative: '幼兒期能得到多少陪伴與刺激，往往跟家庭當時的經濟與時間餘裕有關，而不是嬰幼兒自己能決定的事。' },
     ] },
   { id: 'event_24_first_job_friction', stage: 'earlyCareer', title: '第一份工作的磨合', description: '進入職場後，你發現理想與現實有落差，主管交辦的任務也不總是你熟悉的。', tags: ['core'], weight: 1,
     choices: [
@@ -615,6 +627,8 @@ const TIME_RELEVANT_EVENTS = [
   { id: 'event_20_cross_strait_tension', stage: 'midlife', title: '區域情勢升溫', description: '新聞持續報導區域情勢升溫，你所在的產業（如觀光、物流、科技供應鏈）受到影響，訂單或客源出現波動。', tags: ['time-relevant'], weight: 1,
     choices: [
       { id: 'acknowledge_macro', text: '調整工作節奏，觀察情勢變化', visibleEffects: [], hiddenEffects: [{ stat: 'income', delta: 8000, scaleBy: 'luck', scaleFactor: 0.6 }], resultNarrative: '這類總體環境的變化，通常不是個人努力可以完全抵銷或掌控的。' },
+      { id: 'pivot_to_stable_sector', text: '主動轉往受影響較小的產業或客群', visibleEffects: [{ stat: 'effort', delta: 10 }], hiddenEffects: [{ stat: 'income', delta: 3000 }, { stat: 'stress', delta: 5 }],
+        resultNarrative: '轉換跑道需要成本與時間，能不能順利轉型，也和原本累積的技能、人脈與資源有關。' },
     ] },
   { id: 'event_21_exchange_program', stage: 'highSchool', title: '高中優異表現，出國研習一年', description: '因為在校成績或某項才能表現優異，學校推薦你申請一年期的海外交換研習計畫。名額有限，最後錄取與否還要看申請文件與面試。', tags: ['time-relevant'], weight: 1,
     conditions: [{ stat: 'ability', op: 'gte', value: 65 }],
@@ -1263,10 +1277,10 @@ function getSeedFromUrl() {
 
 function DisclaimerScreen({ onAck }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-5 py-10 sm:px-6 sm:py-16 text-center">
       <div className="eyebrow mb-3">使用須知</div>
       <h1 className="font-display text-2xl sm:text-3xl text-ink mb-8">在開始之前，請先閱讀</h1>
-      <div className="panel p-6 sm:p-8 max-w-xl text-left space-y-4 text-sm text-inkDim leading-relaxed mb-8">
+      <div className="panel p-6 sm:p-8 max-w-xl text-left space-y-4 text-[15px] sm:text-sm text-inkDim leading-relaxed mb-8">
         <p><span className="text-ink font-medium">課程教材聲明：</span>本網頁為社會學課程之互動教材，用於協助學習者理解統計推論（如 p 值、干擾變項、多重檢定與效果量）的概念，不作為其他用途。</p>
         <p>遊戲中出現的人物、家庭、事件、職業、地名與所有情節，均為模擬與虛構內容，由電腦亂數程序產生，<span className="text-ink font-medium">與任何真實存在或曾經存在的人物、家庭或事件均無關聯，如有雷同，純屬巧合。</span></p>
         <p><span className="text-ink font-medium">閱讀停滯設計：</span>遊戲中每次出現新的人生事件，選項按鈕會先暫時鎖定 2–3 秒，這段時間僅供你確實讀完事件內文，不影響遊戲結果，時間到後選項會自動開放。</p>
@@ -1284,7 +1298,7 @@ function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }
     if (urlSeed) { setSeedValue(urlSeed); setShowSeedInput(true); }
   }, []);
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-5 py-10 sm:px-6 sm:py-16 text-center">
       <div className="mb-8 w-52 opacity-90"><LeverHero /></div>
       <div className="eyebrow mb-3">A SOCIOLOGY LIFE SIMULATOR</div>
       <h1 className="font-display text-4xl sm:text-5xl text-ink mb-2">人生力矩</h1>
