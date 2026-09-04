@@ -659,6 +659,25 @@ function pickParentOccupation(rng, education) {
   });
   return rng.weightedChoice(PARENT_OCCUPATIONS, weights);
 }
+/* 家庭年收入的職業校準 —— 原本家庭年收入只依「家庭 SES 概略值」算，跟父母實際被
+   抽到的職業完全脫鉤，才會出現「母親是中小企業主，家庭年收入卻只有 32.8 萬」這種
+   矛盾（32.8 萬已低於 2025 年台灣基本工資年薪水準）。改成直接以父母各自的職業，
+   對照勞動部 114 年《職類別薪資調查》七大職類組月薪，換算成年薪基準（月薪 × 14，
+   概略反映本薪加年終／獎金），兩人合計為家庭年收入；同一職業內仍保留依教師「財富
+   分布離散度」縮放的變異（年資、地區、景氣、公司規模），但下緣鎖在基準的 5 折，
+   確保「有穩定職業」不會被隨機噪音拉到低收入戶等級。 */
+const PARENT_OCCUPATION_ANNUAL_INCOME = {
+  '工廠作業員': 530000, '計程車司機': 480000, '小吃店老闆': 560000, '便利商店店員': 430000,
+  '中小企業職員': 560000, '公務人員': 720000, '國小教師': 750000, '護理師': 680000,
+  '工程師': 950000, '會計師': 1100000, '律師': 1300000, '醫師': 2300000,
+  '大學教授': 1300000, '中小企業主': 1200000, '上市公司主管': 2200000,
+  '農漁民': 480000, '自營商': 620000, '幕僚': 650000, '黨工': 550000, '地方民代': 900000,
+};
+function parentIncomeForOccupation(rng, occupation, wealthVar) {
+  const base = PARENT_OCCUPATION_ANNUAL_INCOME[occupation] || 550000;
+  const noisy = base * (1 + rng.normal(0, 0.3 * wealthVar));
+  return clamp(noisy, base * 0.5, base * 2.6);
+}
 const PLAYER_OCCUPATIONS = ['工程師', '教師', '護理師', '公務人員', '業務員', '自營商', '會計師', '律師', '醫師', '大學教授', '研究員', '設計師', '內容創作者', '社工', '廚師', '幕僚', '黨工', '地方民代', '公司主管', '創業者'];
 /* 職業薪資／退休金模型 —— 相對倍率參考行政院主計總處《職類別薪資調查》各職類總薪資排名，
    以及 104 人力銀行《2025 各行業薪資排名》（詳見結局頁與最後一頁的參考來源）。
@@ -1042,25 +1061,31 @@ const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS, ...STRUCTURE_EVENTS
    （條件不符或已出現過的則不會被抽到），跟兩個結構化事件彼此獨立、不影響原本
    的機會集合、多重檢定等既有機制。 */
 const RANDOM_LIFE_EVENT_CHANCE = 0.3;
+/* 隨機事件對「機制」而非只有「數字」的影響 —— 早期版本這幾件跟家庭經濟有關的隨機
+   事件只改了 wealth（純粹用來在結局頁顯示的現金數字），economicCapital（真正會透過
+   scaleBy 影響教育、機會、成功分數等一連串機制的核心變項）完全沒被動到，等於「父母
+   發生的意外」看起來有影響、實際上對玩家的人生機會沒有任何作用。這裡把會實質改變
+   家庭經濟狀況的事件，同時對 economicCapital 做一個較小、有上下限意義的調整，
+   讓「父母的意外事件」跟「父母的既有狀態」一樣，真的會影響接下來的人生。 */
 const RANDOM_LIFE_EVENTS = [
   { id: 'random_earthquake_1', stages: ['elementary', 'middleSchool', 'highSchool'], title: '一場地震', tags: ['random'],
     description: '一場強震侵襲了你成長的城鎮，家裡的牆面出現裂縫，需要一筆意外的修繕費用；所幸家人都平安無事。',
-    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -35000 }, { stat: 'happiness', delta: -4 }] }] },
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -35000 }, { stat: 'economicCapital', delta: -3 }, { stat: 'happiness', delta: -4 }] }] },
   { id: 'random_earthquake_2', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer', 'midlife'], title: '一場地震', tags: ['random'],
     description: '你居住的城市發生強震，通勤路線、水電一度中斷，生活亂了幾天步調，也讓你重新想起「意外」隨時可能發生。',
-    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -20000 }, { stat: 'happiness', delta: -3 }] }] },
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -20000 }, { stat: 'economicCapital', delta: -2 }, { stat: 'happiness', delta: -3 }] }] },
   { id: 'random_parent_promotion', stages: ['middleSchool', 'highSchool', 'collegeOrWork'], title: '父親當上了市長', tags: ['random'],
     description: '你完全沒有參與這場選戰，但父親多年經營的政治人脈這次開花結果——他當選了市長。家裡的社會位置一夕之間不同了。',
     condition: (player) => player.family.parentInPolitics && player.family.politicalConnections >= 55,
-    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'socialCapital', delta: 14 }, { stat: 'politicalCapital', delta: 22 }, { stat: 'happiness', delta: 6 }] }] },
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'socialCapital', delta: 14 }, { stat: 'politicalCapital', delta: 22 }, { stat: 'economicCapital', delta: 5 }, { stat: 'happiness', delta: 6 }] }] },
   { id: 'random_parent_job_loss', stages: ['elementary', 'middleSchool', 'highSchool'], title: '家中經濟突然吃緊', tags: ['random'],
     description: '父母工作的公司無預警關廠、裁員，家裡收入一下子少了一大塊，晚餐桌上的氣氛變得沉重。',
     condition: (player) => player.family.economicCapital < 55,
-    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -55000 }, { stat: 'happiness', delta: -6 }] }] },
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -55000 }, { stat: 'economicCapital', delta: -6 }, { stat: 'happiness', delta: -6 }] }] },
   { id: 'random_family_business_boom', stages: ['highSchool', 'collegeOrWork', 'earlyCareer'], title: '家裡的生意突然爆紅', tags: ['random'],
     description: '父母經營多年的小生意，因緣際會被媒體報導、生意爆紅，家裡的經濟壓力一下子鬆了不少。',
     condition: (player) => ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.fatherOccupation) || ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.motherOccupation),
-    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 80000 }, { stat: 'happiness', delta: 7 }] }] },
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 80000 }, { stat: 'economicCapital', delta: 6 }, { stat: 'happiness', delta: 7 }] }] },
   { id: 'random_windfall', stages: ['earlyCareer', 'youngAdultCareer', 'midlife', 'careerTurning'], title: '意外的一筆小確幸', tags: ['random'],
     description: '你買的公益彩券難得中了一個小獎，雖然不是什麼翻身的錢，但也足夠讓最近的生活喘一口氣。',
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 20000 }, { stat: 'happiness', delta: 3 }] }] },
@@ -1092,9 +1117,14 @@ function generateFamilyBackground(rng, settings) {
   const socialVar = inequalityVarianceMultiplier(settings, 'socialCapitalInequality');
   const regionalVar = inequalityVarianceMultiplier(settings, 'regionalInequality');
   const ses = clamp(rng.normal(50, 20), 0, 100);
-  const householdIncome = Math.round(clamp(ses * 15000 + rng.normal(0, 80000 * wealthVar), 200000, 8000000));
   const fatherEducation = clamp(ses * 0.7 + rng.normal(0, 15 * eduVar), 0, 100);
   const motherEducation = clamp(ses * 0.7 + rng.normal(0, 15 * eduVar), 0, 100);
+  const fatherOccupation = pickParentOccupation(rng, fatherEducation);
+  const motherOccupation = pickParentOccupation(rng, motherEducation);
+  const householdIncome = Math.round(clamp(
+    parentIncomeForOccupation(rng, fatherOccupation, wealthVar) + parentIncomeForOccupation(rng, motherOccupation, wealthVar),
+    300000, 15000000
+  ));
   const booksAtHome = Math.round(clamp(ses * 2 + rng.normal(0, 20 * culturalVar), 0, 500));
   const housingSecurity = clamp(ses * 0.6 + rng.normal(0, 20 * regionalVar), 0, 100);
   const professionalConnections = clamp(ses * 0.5 + rng.normal(0, 20 * socialVar), 0, 100);
@@ -1103,8 +1133,6 @@ function generateFamilyBackground(rng, settings) {
   const culturalCapital = clamp(ses * 0.65 + rng.normal(0, 15 * culturalVar), 0, 100);
   const socialCapital = clamp(ses * 0.5 + professionalConnections * 0.3 + rng.normal(0, 12 * socialVar), 0, 100);
   const economicCapital = clamp(ses * 0.8 + rng.normal(0, 10 * wealthVar), 0, 100);
-  const fatherOccupation = pickParentOccupation(rng, fatherEducation);
-  const motherOccupation = pickParentOccupation(rng, motherEducation);
   /* 幼年陪伴程度：與家庭社經地位只有「弱」相關（高薪工作有時反而更忙碌、更難陪伴），
      保留較大的獨立隨機成分，用來呈現「陪伴不完全是用錢買的」這個現象，
      跟經濟資本、文化資本是彼此獨立又互相影響的不同面向。 */
