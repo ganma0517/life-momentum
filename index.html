@@ -526,6 +526,9 @@ const DEFAULT_SETTINGS = {
      才能看到實際設定，藉此比較學生的主觀感受與實際資料之間的落差。 */
   blindMode: false,
   enableFamilyCrisis: true, enablePoliticalCapital: true, enableMultipleTestingLesson: true, enablePValueLesson: true, enableTimeRelevantEvents: true,
+  /* 隨機外生事件（地震、父母職涯機運……）：預設開啟，每個人生階段結束後約 30% 機率
+     觸發一件，不是選項、只有「知道了，繼續」可以按，用來呈現「不是所有事都是你選的」。 */
+  enableRandomLifeEvents: true,
 };
 const SETTINGS_BOUNDS = {
   npcSampleSize: { min: 100, max: 3000, step: 100 },
@@ -635,6 +638,27 @@ function describeSociety(settings) {
 const PARENT_IN_POLITICS_BASE_PROBABILITY = 0.05;
 
 const PARENT_OCCUPATIONS = ['工廠作業員', '計程車司機', '小吃店老闆', '便利商店店員', '中小企業職員', '公務人員', '國小教師', '護理師', '工程師', '會計師', '律師', '醫師', '大學教授', '中小企業主', '上市公司主管', '農漁民', '自營商', '幕僚', '黨工', '地方民代'];
+/* 職業與學歷的一致性 —— 每種職業有一個「合理最低學歷」（例如大學教授至少要碩士以上、
+   國小教師/工程師/會計師至少要大學畢業），選職業時直接用「這位家長自己抽到的學歷分數」
+   （而不是只用家庭 SES 概略值）來加權篩選，避免出現「母親國中肄業卻是大學教授」這種
+   學歷與職業互相矛盾的組合。門檻以下仍給極小權重（而非直接排除），保留現實中偶有的
+   例外（例如自學、資歷抵免），但機率非常低。 */
+const OCCUPATION_MIN_EDUCATION = {
+  '工廠作業員': 0, '計程車司機': 0, '小吃店老闆': 0, '便利商店店員': 0, '農漁民': 0, '自營商': 0,
+  '中小企業職員': 15, '中小企業主': 15, '黨工': 15, '地方民代': 15,
+  '公務人員': 35, '幕僚': 35,
+  '國小教師': 55, '護理師': 40, '工程師': 55, '會計師': 55, '上市公司主管': 55,
+  '律師': 60, '醫師': 60,
+  '大學教授': 75,
+};
+function pickParentOccupation(rng, education) {
+  const weights = PARENT_OCCUPATIONS.map((occ) => {
+    const minEdu = OCCUPATION_MIN_EDUCATION[occ] || 0;
+    if (education < minEdu - 8) return 0.02;
+    return Math.max(1, 40 - Math.abs(education - (minEdu + 10)));
+  });
+  return rng.weightedChoice(PARENT_OCCUPATIONS, weights);
+}
 const PLAYER_OCCUPATIONS = ['工程師', '教師', '護理師', '公務人員', '業務員', '自營商', '會計師', '律師', '醫師', '大學教授', '研究員', '設計師', '內容創作者', '社工', '廚師', '幕僚', '黨工', '地方民代', '公司主管', '創業者'];
 /* 職業薪資／退休金模型 —— 相對倍率參考行政院主計總處《職類別薪資調查》各職類總薪資排名，
    以及 104 人力銀行《2025 各行業薪資排名》（詳見結局頁與最後一頁的參考來源）。
@@ -1011,6 +1035,45 @@ const STRUCTURE_EVENTS = [
 
 const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS, ...STRUCTURE_EVENTS];
 
+/* 隨機外生事件 —— 跟前面所有事件不同：這些不是「選擇」，而是社會學要特別凸顯的
+   「運氣／外生衝擊」（地震、家中生意起落、父母的政治機運……）。玩家沒有決定權，
+   只能承受結果，畫面上也只會有一個「知道了，繼續人生」的按鈕，藉此對照「哪些是
+   你選的、哪些是降臨在你身上的」。每個人生階段結束時，有一定機率額外觸發一件
+   （條件不符或已出現過的則不會被抽到），跟兩個結構化事件彼此獨立、不影響原本
+   的機會集合、多重檢定等既有機制。 */
+const RANDOM_LIFE_EVENT_CHANCE = 0.3;
+const RANDOM_LIFE_EVENTS = [
+  { id: 'random_earthquake_1', stages: ['elementary', 'middleSchool', 'highSchool'], title: '一場地震', tags: ['random'],
+    description: '一場強震侵襲了你成長的城鎮，家裡的牆面出現裂縫，需要一筆意外的修繕費用；所幸家人都平安無事。',
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -35000 }, { stat: 'happiness', delta: -4 }] }] },
+  { id: 'random_earthquake_2', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer', 'midlife'], title: '一場地震', tags: ['random'],
+    description: '你居住的城市發生強震，通勤路線、水電一度中斷，生活亂了幾天步調，也讓你重新想起「意外」隨時可能發生。',
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -20000 }, { stat: 'happiness', delta: -3 }] }] },
+  { id: 'random_parent_promotion', stages: ['middleSchool', 'highSchool', 'collegeOrWork'], title: '父親當上了市長', tags: ['random'],
+    description: '你完全沒有參與這場選戰，但父親多年經營的政治人脈這次開花結果——他當選了市長。家裡的社會位置一夕之間不同了。',
+    condition: (player) => player.family.parentInPolitics && player.family.politicalConnections >= 55,
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'socialCapital', delta: 14 }, { stat: 'politicalCapital', delta: 22 }, { stat: 'happiness', delta: 6 }] }] },
+  { id: 'random_parent_job_loss', stages: ['elementary', 'middleSchool', 'highSchool'], title: '家中經濟突然吃緊', tags: ['random'],
+    description: '父母工作的公司無預警關廠、裁員，家裡收入一下子少了一大塊，晚餐桌上的氣氛變得沉重。',
+    condition: (player) => player.family.economicCapital < 55,
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -55000 }, { stat: 'happiness', delta: -6 }] }] },
+  { id: 'random_family_business_boom', stages: ['highSchool', 'collegeOrWork', 'earlyCareer'], title: '家裡的生意突然爆紅', tags: ['random'],
+    description: '父母經營多年的小生意，因緣際會被媒體報導、生意爆紅，家裡的經濟壓力一下子鬆了不少。',
+    condition: (player) => ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.fatherOccupation) || ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.motherOccupation),
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 80000 }, { stat: 'happiness', delta: 7 }] }] },
+  { id: 'random_windfall', stages: ['earlyCareer', 'youngAdultCareer', 'midlife', 'careerTurning'], title: '意外的一筆小確幸', tags: ['random'],
+    description: '你買的公益彩券難得中了一個小獎，雖然不是什麼翻身的錢，但也足夠讓最近的生活喘一口氣。',
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 20000 }, { stat: 'happiness', delta: 3 }] }] },
+  { id: 'random_pandemic_wave', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer'], title: '一波突如其來的傳染病', tags: ['random'],
+    description: '一波疫情席捲全國，學校與職場都被迫改變運作方式，沒有人能自己決定要不要被捲入這場變化。',
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'happiness', delta: -3 }, { stat: 'health', delta: -3 }] }] },
+];
+function pickRandomLifeEvent(stage, player, rng, usedIds) {
+  const candidates = RANDOM_LIFE_EVENTS.filter((e) => e.stages.includes(stage) && !usedIds.has(e.id) && (!e.condition || e.condition(player)));
+  if (candidates.length === 0) return null;
+  return rng.randomChoice(candidates);
+}
+
 /* ============================================================
    5. GAME ENGINE — family generation, player creation, effects, events
    ============================================================ */
@@ -1040,9 +1103,8 @@ function generateFamilyBackground(rng, settings) {
   const culturalCapital = clamp(ses * 0.65 + rng.normal(0, 15 * culturalVar), 0, 100);
   const socialCapital = clamp(ses * 0.5 + professionalConnections * 0.3 + rng.normal(0, 12 * socialVar), 0, 100);
   const economicCapital = clamp(ses * 0.8 + rng.normal(0, 10 * wealthVar), 0, 100);
-  const occWeights = PARENT_OCCUPATIONS.map((_, i) => Math.max(1, 100 - Math.abs(i - ses / 5)));
-  const fatherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
-  const motherOccupation = rng.weightedChoice(PARENT_OCCUPATIONS, occWeights);
+  const fatherOccupation = pickParentOccupation(rng, fatherEducation);
+  const motherOccupation = pickParentOccupation(rng, motherEducation);
   /* 幼年陪伴程度：與家庭社經地位只有「弱」相關（高薪工作有時反而更忙碌、更難陪伴），
      保留較大的獨立隨機成分，用來呈現「陪伴不完全是用錢買的」這個現象，
      跟經濟資本、文化資本是彼此獨立又互相影響的不同面向。 */
@@ -1497,6 +1559,23 @@ function replaySession(seed, settings, pool, history) {
         return { player, nextEvent: { ...event, choices: unlockedChoices }, done: false };
       }
     }
+    /* 每個階段的兩個結構化事件跑完後，額外擲一次骰子決定要不要發生一件「隨機外生事件」——
+       跟上面的事件不同，玩家看到的只有一個「知道了，繼續」按鈕，沒有選項可挑。 */
+    if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_LIFE_EVENT_CHANCE)) {
+      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds);
+      if (randomEvent) {
+        usedEventIds.add(randomEvent.id);
+        if (historyIndex < history.length) {
+          const record = history[historyIndex];
+          const choice = randomEvent.choices.find((c) => c.id === record.choiceId) || randomEvent.choices[0];
+          const result = applyChoice(player, randomEvent, choice, eventsRng, settings);
+          player = result.player;
+          historyIndex += 1;
+        } else {
+          return { player, nextEvent: randomEvent, done: false };
+        }
+      }
+    }
   }
   return { player: finalizePlayer(player, settings, eventsRng, seed), nextEvent: null, done: true };
 }
@@ -1520,6 +1599,15 @@ function simulateFullLife(options) {
       const choice = selector(player, visibleEvent, eventsRng);
       const result = applyChoice(player, event, choice, eventsRng, settings);
       player = result.player;
+    }
+    if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_LIFE_EVENT_CHANCE)) {
+      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds);
+      if (randomEvent) {
+        usedEventIds.add(randomEvent.id);
+        const choice = randomEvent.choices[0];
+        const result = applyChoice(player, randomEvent, choice, eventsRng, settings);
+        player = result.player;
+      }
     }
   }
   return finalizePlayer(player, settings, eventsRng, cohortSeed || seed);
@@ -1853,110 +1941,43 @@ function StatBar({ label, value, color }) {
     </div>
   );
 }
-function StatusPanel({ player }) {
+/* 手機版狀態列 —— 原本「玩家卡」＋「六條全寬狀態條」上下兩張卡片，在手機瀏覽器裡
+   會佔掉過多的第一屏高度，玩家往往要先滑過一大段狀態列才能看到事件本身。
+   參考類似手機人生／棒球模擬器（如 YaKyoLife）常見做法：把身份資訊收成單一行，
+   六項狀態改成 3 欄小方塊（標籤＋數值＋細長進度條），大幅壓低整體高度，
+   讓「捲一下就能看到選項」在手機上更成立。 */
+function StatChip({ label, value, color }) {
   return (
-    <div className="panel p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm text-ink font-mono">{player.age} 歲 · {player.occupation}</div>
-        <div className="text-xs text-inkFaint">{LIFE_STAGE_LABELS[player.stage]}</div>
+    <div className="rounded-lg bg-surface2 border border-borderc px-2.5 py-2 min-w-0">
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-[11px] text-inkFaint truncate">{label}</span>
+        <span className="text-xs font-mono tabular text-ink shrink-0 ml-1">{Math.round(value)}</span>
       </div>
-      <StatBar label="健康" value={player.health} color="#6fa87a" />
-      <StatBar label="快樂" value={player.happiness} color="#d4a84c" />
-      <StatBar label="能力" value={player.ability} color="#4ba3a3" />
-      <StatBar label="努力" value={player.effort} color="#d4a84c" />
-      <StatBar label="教育" value={player.education} color="#4ba3a3" />
-      <StatBar label="人際" value={player.interpersonal} color="#9b8cd6" />
+      <div className="h-1.5 rounded-full bg-bg overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: Math.min(100, Math.max(0, value)) + '%', background: color }} />
+      </div>
     </div>
   );
 }
-/* 玩家自訂姓名／頭像 —— 完全在瀏覽器端以「姓名或 Seed 的雜湊值」決定色系與縮寫，
-   不需要、也不會上傳任何真人照片：考量到使用者多為學生（可能未成年），
-   自動生成頭像可以在「增加帶入感」與「不處理真人影像上傳的隱私風險」之間取得平衡。 */
-function hashStringToIndex(str, mod) {
-  let h = 0;
-  const s = String(str || '');
-  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
-  return h % mod;
-}
-const AVATAR_BG_PALETTE = ['#3a2f1c', '#1c3230', '#33211c', '#1f2b3a', '#2b2035', '#233522'];
-const AVATAR_ACCENT_PALETTE = ['#d4a84c', '#4ba3a3', '#c2694f', '#6fa87a', '#6b83c9', '#9b6bb5'];
-const AVATAR_SKIN_TONES = ['#f4d0ab', '#e8b587', '#c68a58', '#9c6b3f', '#7a4b28'];
-const AVATAR_HAIR_COLORS = ['#2b2320', '#4a2f1c', '#6b4423', '#8a5a2e', '#d4a84c', '#3f3f3f', '#1a1a1a'];
-/* 卡通素像頭像 —— 5 種髮型輪廓 × 5 種膚色 × 7 種髮色 × 6 種背景色 × 表情/眼鏡，
-   全部由姓名（或 Seed）的雜湊值決定，純 SVG 向量繪製，不依賴任何外部圖庫或
-   真人照片，符合「增加帶入感」但不處理未成年學生真人影像的原則。 */
-function hairShape(style, hairColor) {
-  switch (style) {
-    case 0: // 短髮／平頭
-      return <path d="M18 40 Q18 14 50 14 Q82 14 82 40 L82 30 Q82 20 50 20 Q18 20 18 30 Z" fill={hairColor} />;
-    case 1: // 旁分
-      return (
-        <g fill={hairColor}>
-          <path d="M16 38 Q14 12 50 10 Q88 12 84 40 L84 26 Q80 16 46 16 Q20 18 20 30 Z" />
-          <rect x="44" y="10" width="6" height="14" rx="3" />
-        </g>
-      );
-    case 2: // 長髮／馬尾
-      return (
-        <g fill={hairColor}>
-          <path d="M16 44 Q14 12 50 10 Q86 12 84 44 L84 60 Q78 44 78 40 L78 30 Q78 18 50 16 Q22 18 22 30 L22 40 Q22 44 16 60 Z" />
-          <circle cx="50" cy="9" r="6" />
-        </g>
-      );
-    case 3: // 捲髮
-      return (
-        <g fill={hairColor}>
-          {[18, 30, 42, 54, 66, 78].map((cx, i) => <circle key={i} cx={cx} cy={i % 2 === 0 ? 18 : 14} r="9" />)}
-          <rect x="18" y="14" width="64" height="16" rx="8" />
-        </g>
-      );
-    default: // 光頭／極短
-      return <path d="M20 30 Q20 16 50 15 Q80 16 80 30 L80 24 Q78 17 50 17 Q22 17 20 24 Z" fill={hairColor} opacity="0.85" />;
-  }
-}
-function Avatar({ name, seed, size }) {
-  const px = size || 40;
-  const trimmed = (name || '').trim();
-  const key = trimmed || ('seed-' + (seed != null ? seed : '0'));
-  const bg = AVATAR_BG_PALETTE[hashStringToIndex(key + '::bg', AVATAR_BG_PALETTE.length)];
-  const accent = AVATAR_ACCENT_PALETTE[hashStringToIndex(key + '::accent', AVATAR_ACCENT_PALETTE.length)];
-  const skin = AVATAR_SKIN_TONES[hashStringToIndex(key + '::skin', AVATAR_SKIN_TONES.length)];
-  const hairColor = AVATAR_HAIR_COLORS[hashStringToIndex(key + '::hair', AVATAR_HAIR_COLORS.length)];
-  const hairStyle = hashStringToIndex(key + '::style', 5);
-  const mouthType = hashStringToIndex(key + '::mouth', 3);
-  const hasGlasses = hashStringToIndex(key + '::glasses', 10) < 3;
-  const mouthPath = mouthType === 0 ? 'M40 66 Q50 74 60 66' : mouthType === 1 ? 'M42 67 L58 67' : 'M40 65 Q50 70 60 65 Q50 62 40 65';
-  return (
-    <div className="rounded-full overflow-hidden shrink-0" style={{ width: px, height: px, border: '1.5px solid ' + accent }} aria-hidden="true">
-      <svg viewBox="0 0 100 100" width={px} height={px}>
-        <circle cx="50" cy="50" r="50" fill={bg} />
-        <circle cx="50" cy="56" r="26" fill={skin} />
-        <path d="M24 58 Q22 82 50 88 Q78 82 76 58 Q76 40 50 40 Q24 40 24 58 Z" fill={skin} />
-        <circle cx="40" cy="54" r="3" fill="#2b2320" />
-        <circle cx="60" cy="54" r="3" fill="#2b2320" />
-        {hasGlasses && (
-          <g stroke={accent} strokeWidth="2.4" fill="none">
-            <circle cx="40" cy="54" r="8" /><circle cx="60" cy="54" r="8" /><line x1="48" y1="54" x2="52" y2="54" />
-          </g>
-        )}
-        <path d={mouthPath} stroke="#8a4a3a" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-        {hairShape(hairStyle, hairColor)}
-      </svg>
-    </div>
-  );
-}
-function PlayerCard({ player, playerName }) {
+function GameHeader({ player, playerName }) {
   const genderLabel = player.gender === 'male' ? '男性' : player.gender === 'female' ? '女性' : '其他';
   return (
-    <div className="panel p-4 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <Avatar name={playerName} seed={player.seed} size={40} />
+    <div className="panel p-3.5">
+      <div className="flex items-center justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="text-sm text-ink font-medium truncate">{playerName ? playerName : player.birthplace + ' · ' + genderLabel}</div>
-          <div className="text-xs text-inkFaint mt-0.5">{LIFE_STAGE_LABELS[player.stage]} · {player.age} 歲</div>
+          <div className="text-xs text-inkFaint mt-0.5 truncate">{LIFE_STAGE_LABELS[player.stage]} · {player.age} 歲 · {player.occupation}</div>
         </div>
+        <div className="text-[10px] text-inkFaint font-mono shrink-0">SEED {player.seed}</div>
       </div>
-      <div className="text-xs text-inkFaint font-mono shrink-0">SEED {player.seed}</div>
+      <div className="grid grid-cols-3 gap-2">
+        <StatChip label="健康" value={player.health} color="#6fa87a" />
+        <StatChip label="快樂" value={player.happiness} color="#d4a84c" />
+        <StatChip label="能力" value={player.ability} color="#4ba3a3" />
+        <StatChip label="努力" value={player.effort} color="#d4a84c" />
+        <StatChip label="教育" value={player.education} color="#4ba3a3" />
+        <StatChip label="人際" value={player.interpersonal} color="#9b8cd6" />
+      </div>
     </div>
   );
 }
@@ -1996,9 +2017,10 @@ function EventCard({ event, onChoose }) {
     const unlockId = setTimeout(() => { setLocked(false); clearInterval(tickId); }, pauseMs);
     return () => { clearInterval(tickId); clearTimeout(unlockId); };
   }, [event.id, pauseMs]);
+  const isRandom = !!(event.tags && event.tags.includes('random'));
   return (
-    <div key={event.id} className="panel p-6 fade-up">
-      <div className="eyebrow mb-2">{LIFE_STAGE_LABELS[event.stage]} 檔案</div>
+    <div key={event.id} className={'panel p-6 fade-up' + (isRandom ? ' border-rust/50' : '')}>
+      <div className={'eyebrow mb-2' + (isRandom ? ' text-rust' : '')}>{isRandom ? '隨機事件 · 與你的選擇無關' : LIFE_STAGE_LABELS[event.stage] + ' 檔案'}</div>
       <h2 className="font-display text-lg text-ink mb-2">{event.title}</h2>
       <p className="text-inkDim leading-relaxed mb-6 whitespace-pre-line">{event.description}</p>
       {locked ? (
@@ -2013,7 +2035,7 @@ function EventCard({ event, onChoose }) {
         </div>
       )}
       <div className={'mt-4 text-sm font-mono transition-opacity duration-300 ' + (locked ? 'opacity-100 text-brass' : 'opacity-0 h-0 overflow-hidden')} aria-live="polite">
-        請先讀完內文再選擇 · {secondsLeft > 0 ? secondsLeft + ' 秒後開放選項' : '即將開放'}
+        {isRandom ? ('請先讀完內文 · ' + (secondsLeft > 0 ? secondsLeft + ' 秒後可以繼續' : '即將開放')) : ('請先讀完內文再選擇 · ' + (secondsLeft > 0 ? secondsLeft + ' 秒後開放選項' : '即將開放'))}
       </div>
     </div>
   );
@@ -2032,10 +2054,7 @@ function EndingCard({ player, playerName }) {
   return (
     <div className="panel p-8 text-center fade-up">
       <div className="eyebrow mb-2">人生履歷 · 結案</div>
-      <div className="flex flex-col items-center gap-2 mb-2">
-        <Avatar name={playerName} seed={player.seed} size={56} />
-        <div className="text-sm text-inkFaint">{playerName ? playerName + '，你退休了' : '你退休了'}</div>
-      </div>
+      <div className="text-sm text-inkFaint mb-2">{playerName ? playerName + '，你退休了' : '你退休了'}</div>
       <h1 className="font-display text-2xl text-ink mb-1">{ending.headline}</h1>
       <p className="text-inkDim text-base mb-8">{ending.description}</p>
       <div className="grid grid-cols-2 gap-3 text-left">
@@ -2221,12 +2240,8 @@ function HomeScreen({ onStart, onContinue, hasSave, onShowHowTo, onShowTeacher }
         <p>不努力一定不會成功？</p>
       </div>
       <div className="flex flex-col gap-3 w-full max-w-xs">
-        <div className="flex items-center gap-2.5 mb-1">
-          <Avatar name={nameValue} seed={seedValue || 'home-preview'} size={40} />
-          <input value={nameValue} onChange={(e) => setNameValue(e.target.value.slice(0, 12))} placeholder="幫這個人生取個名字（選填）"
-            className="flex-1 px-3 py-2.5 rounded-lg bg-surface2 border border-borderc text-ink text-sm text-left focus:outline-none focus:border-brass" />
-        </div>
-        <p className="text-xs text-inkFaint -mt-2 mb-1 text-left px-0.5">頭像會依姓名自動生成卡通素像，完全在你的瀏覽器裡完成，不會上傳任何照片。</p>
+        <input value={nameValue} onChange={(e) => setNameValue(e.target.value.slice(0, 12))} placeholder="幫這個人生取個名字（選填）"
+          className="w-full px-3 py-2.5 rounded-lg bg-surface2 border border-borderc text-ink text-sm text-center focus:outline-none focus:border-brass" />
         <button onClick={() => onStart(undefined, nameValue)} className="btn-primary w-full py-3.5">開始我的人生</button>
         {!showSeedInput ? (
           <button onClick={() => setShowSeedInput(true)} className="btn-ghost w-full py-3 text-sm">輸入 Seed</button>
@@ -2305,6 +2320,7 @@ const TOGGLE_FIELDS = [
   { key: 'enableMultipleTestingLesson', label: '是否開啟 multiple testing 教學' },
   { key: 'enablePValueLesson', label: '是否開啟 p-value 教學' },
   { key: 'enableTimeRelevantEvents', label: '是否開啟時事事件包（EVENT 09–22）' },
+  { key: 'enableRandomLifeEvents', label: '是否開啟隨機外生事件（地震、父母職涯機運等，非選項）' },
   { key: 'blindMode', label: '盲玩模式：學生不知道目前是哪種社會' },
   { key: 'enableRecessionShock', label: '世代衝擊・經濟衰退' },
   { key: 'enableHousingBoomShock', label: '世代衝擊・房價上漲' },
@@ -2339,7 +2355,7 @@ const NUMERIC_FIELD_STEP = {
   npcSampleSize: 'statistics', alphaThreshold: 'statistics',
 };
 const TOGGLE_FIELD_STEP = {
-  enableFamilyCrisis: 'randomEvents', enablePoliticalCapital: 'randomEvents', enableTimeRelevantEvents: 'randomEvents', blindMode: 'randomEvents',
+  enableFamilyCrisis: 'randomEvents', enablePoliticalCapital: 'randomEvents', enableTimeRelevantEvents: 'randomEvents', enableRandomLifeEvents: 'randomEvents', blindMode: 'randomEvents',
   enableRecessionShock: 'randomEvents', enableHousingBoomShock: 'randomEvents', enablePandemicShock: 'randomEvents', enableAutomationShock: 'randomEvents',
   enableOffshoringShock: 'randomEvents', enableEducationExpansionShock: 'randomEvents', enableWelfareReformShock: 'randomEvents',
   enableMultipleTestingLesson: 'statistics', enablePValueLesson: 'statistics',
@@ -2572,10 +2588,7 @@ function GameScreen({ player, playerName, nextEvent, phase, settings, choose, go
     return (
       <div className="min-h-screen px-4 py-8 max-w-2xl mx-auto">
         <div className="mb-4"><LifeTimeline currentStage={player.stage} /></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-          <PlayerCard player={player} playerName={playerName} />
-          <StatusPanel player={player} />
-        </div>
+        <div className="mb-5"><GameHeader player={player} playerName={playerName} /></div>
         {lastNarrative && (
           <div className="mb-4 text-sm text-ink bg-teal/10 border border-teal/40 rounded-xl px-4 py-3">{lastNarrative}</div>
         )}
