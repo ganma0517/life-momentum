@@ -953,6 +953,17 @@ const TIME_RELEVANT_EVENTS = [
         ] } },
       { id: 'skip_it', text: '評估後決定不申請，把精力放在原本的升學規劃上', visibleEffects: [{ stat: 'effort', delta: 10 }] },
       { id: 'apply_halfheartedly', text: '心不甘情不願地申請，準備得很敷衍', visibleEffects: [{ stat: 'happiness', delta: -2 }], hiddenEffects: [{ stat: 'opportunity', delta: -3 }] },
+      /* 這兩個選項平常不存在，只有玩家人生中真的發生過對應的「大事件」
+         （中大樂透／父親當選立委）才會出現——呈現「意外」不只改分數，
+         也真的會打開原本不存在的人生選項。 */
+      { id: 'apply_family_funded', text: '家裡全額資助，安心出國研習', visibleEffects: [{ stat: 'effort', delta: 10 }, { stat: 'happiness', delta: 5 }],
+        hiddenEffects: [{ stat: 'opportunity', delta: 10 }, { stat: 'culturalCapital', delta: 6 }],
+        unlock: { any: [{ stat: 'flags.wonLottery', op: 'eq', value: true }] },
+        resultNarrative: '家裡最近中了大樂透，這趟海外研習從報名到生活費全部由家裡買單，你完全不用煩惱錢的問題。' },
+      { id: 'apply_public_funded', text: '透過父親的政治人脈，申請到公費留學名額', visibleEffects: [{ stat: 'effort', delta: 8 }, { stat: 'happiness', delta: 3 }],
+        hiddenEffects: [{ stat: 'opportunity', delta: 8 }, { stat: 'politicalCapital', delta: 5 }, { stat: 'socialCapital', delta: 4 }],
+        unlock: { any: [{ stat: 'flags.parentLegislator', op: 'eq', value: true }] },
+        resultNarrative: '父親當選立委後累積的人脈，讓你申請公費留學名額時多了一些原本不會有的門路。' },
     ] },
   { id: 'event_22_politics', stage: 'youngAdultCareer', title: '從政這條路', description: '你有機會加入地方公職人員的團隊擔任幕僚，或是自己考慮投入基層公共事務，這條路如果走下去，未來也可能進一步參選民意代表。', tags: ['time-relevant'], weight: 1,
     choices: [
@@ -1061,6 +1072,15 @@ const ALL_EVENTS = [...CORE_EVENTS, ...TIME_RELEVANT_EVENTS, ...STRUCTURE_EVENTS
    （條件不符或已出現過的則不會被抽到），跟兩個結構化事件彼此獨立、不影響原本
    的機會集合、多重檢定等既有機制。 */
 const RANDOM_LIFE_EVENT_CHANCE = 0.3;
+/* 大事件 Big Random Events —— 跟上面「小事件」同一套機制（唯一選項、只能承受、
+   不影響機會集合／多重檢定），但機率獨立且低很多（約 7%），影響幅度也明顯放大，
+   用來凸顯「人生中真正翻轉命運等級的意外，比日常小波動罕見得多、但影響也大得多」
+   這個社會學重點。大事件另外會在 player.flags 留下一個持久旗標（例如
+   flags.wonLottery、flags.parentLegislator），讓後面的結構化事件可以用
+   choice.unlock 判斷玩家「曾經發生過這件大事」，藉此在後段事件（例如出國留學）
+   多開放原本不存在的選項（家裡全額資助、領取公費……），呈現「意外」不只改分數，
+   也真的會改變一個人往後看得到哪些選擇。 */
+const RANDOM_BIG_LIFE_EVENT_CHANCE = 0.035;
 /* 隨機事件對「機制」而非只有「數字」的影響 —— 早期版本這幾件跟家庭經濟有關的隨機
    事件只改了 wealth（純粹用來在結局頁顯示的現金數字），economicCapital（真正會透過
    scaleBy 影響教育、機會、成功分數等一連串機制的核心變項）完全沒被動到，等於「父母
@@ -1068,33 +1088,42 @@ const RANDOM_LIFE_EVENT_CHANCE = 0.3;
    家庭經濟狀況的事件，同時對 economicCapital 做一個較小、有上下限意義的調整，
    讓「父母的意外事件」跟「父母的既有狀態」一樣，真的會影響接下來的人生。 */
 const RANDOM_LIFE_EVENTS = [
-  { id: 'random_earthquake_1', stages: ['elementary', 'middleSchool', 'highSchool'], title: '一場地震', tags: ['random'],
+  { id: 'random_earthquake_1', severity: 'small', stages: ['elementary', 'middleSchool', 'highSchool'], title: '一場地震', tags: ['random'],
     description: '一場強震侵襲了你成長的城鎮，家裡的牆面出現裂縫，需要一筆意外的修繕費用；所幸家人都平安無事。',
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -35000 }, { stat: 'economicCapital', delta: -3 }, { stat: 'happiness', delta: -4 }] }] },
-  { id: 'random_earthquake_2', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer', 'midlife'], title: '一場地震', tags: ['random'],
+  { id: 'random_earthquake_2', severity: 'small', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer', 'midlife'], title: '一場地震', tags: ['random'],
     description: '你居住的城市發生強震，通勤路線、水電一度中斷，生活亂了幾天步調，也讓你重新想起「意外」隨時可能發生。',
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -20000 }, { stat: 'economicCapital', delta: -2 }, { stat: 'happiness', delta: -3 }] }] },
-  { id: 'random_parent_promotion', stages: ['middleSchool', 'highSchool', 'collegeOrWork'], title: '父親當上了市長', tags: ['random'],
+  { id: 'random_parent_promotion', severity: 'small', stages: ['middleSchool', 'highSchool', 'collegeOrWork'], title: '父親當上了市長', tags: ['random'],
     description: '你完全沒有參與這場選戰，但父親多年經營的政治人脈這次開花結果——他當選了市長。家裡的社會位置一夕之間不同了。',
     condition: (player) => player.family.parentInPolitics && player.family.politicalConnections >= 55,
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'socialCapital', delta: 14 }, { stat: 'politicalCapital', delta: 22 }, { stat: 'economicCapital', delta: 5 }, { stat: 'happiness', delta: 6 }] }] },
-  { id: 'random_parent_job_loss', stages: ['elementary', 'middleSchool', 'highSchool'], title: '家中經濟突然吃緊', tags: ['random'],
+  { id: 'random_parent_job_loss', severity: 'small', stages: ['elementary', 'middleSchool', 'highSchool'], title: '家中經濟突然吃緊', tags: ['random'],
     description: '父母工作的公司無預警關廠、裁員，家裡收入一下子少了一大塊，晚餐桌上的氣氛變得沉重。',
     condition: (player) => player.family.economicCapital < 55,
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: -55000 }, { stat: 'economicCapital', delta: -6 }, { stat: 'happiness', delta: -6 }] }] },
-  { id: 'random_family_business_boom', stages: ['highSchool', 'collegeOrWork', 'earlyCareer'], title: '家裡的生意突然爆紅', tags: ['random'],
+  { id: 'random_family_business_boom', severity: 'small', stages: ['highSchool', 'collegeOrWork', 'earlyCareer'], title: '家裡的生意突然爆紅', tags: ['random'],
     description: '父母經營多年的小生意，因緣際會被媒體報導、生意爆紅，家裡的經濟壓力一下子鬆了不少。',
     condition: (player) => ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.fatherOccupation) || ['中小企業主', '自營商', '小吃店老闆'].includes(player.family.motherOccupation),
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 80000 }, { stat: 'economicCapital', delta: 6 }, { stat: 'happiness', delta: 7 }] }] },
-  { id: 'random_windfall', stages: ['earlyCareer', 'youngAdultCareer', 'midlife', 'careerTurning'], title: '意外的一筆小確幸', tags: ['random'],
+  { id: 'random_windfall', severity: 'small', stages: ['earlyCareer', 'youngAdultCareer', 'midlife', 'careerTurning'], title: '意外的一筆小確幸', tags: ['random'],
     description: '你買的公益彩券難得中了一個小獎，雖然不是什麼翻身的錢，但也足夠讓最近的生活喘一口氣。',
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 20000 }, { stat: 'happiness', delta: 3 }] }] },
-  { id: 'random_pandemic_wave', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer'], title: '一波突如其來的傳染病', tags: ['random'],
+  { id: 'random_pandemic_wave', severity: 'small', stages: ['collegeOrWork', 'earlyCareer', 'youngAdultCareer'], title: '一波突如其來的傳染病', tags: ['random'],
     description: '一波疫情席捲全國，學校與職場都被迫改變運作方式，沒有人能自己決定要不要被捲入這場變化。',
     choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'happiness', delta: -3 }, { stat: 'health', delta: -3 }] }] },
+  { id: 'random_lottery_jackpot', severity: 'big', stages: ['middleSchool', 'highSchool', 'collegeOrWork', 'earlyCareer', 'youngAdultCareer'], title: '家裡中了大樂透', tags: ['random'],
+    description: '新聞在播獎號的時候，家人隨口對了對，才發現手上這張彩券真的中了威力彩的大獎。一夕之間，家裡的經濟壓力幾乎整個消失了。',
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'wealth', delta: 1500000 }, { stat: 'economicCapital', delta: 14 }, { stat: 'happiness', delta: 10 }],
+      hiddenEffects: [{ flag: 'wonLottery' }] }] },
+  { id: 'random_parent_legislator', severity: 'big', stages: ['highSchool', 'collegeOrWork'], title: '父親當選了立法委員', tags: ['random'],
+    description: '父親這些年在地方政壇累積的實力，這次真正推上了另一個層級——他當選了立法委員，家裡的社會位置與人脈規模，跟以前完全不是同一回事了。',
+    condition: (player) => player.family.parentInPolitics && player.family.politicalConnections >= 65,
+    choices: [{ id: 'ack', text: '知道了，繼續人生', visibleEffects: [{ stat: 'socialCapital', delta: 25 }, { stat: 'politicalCapital', delta: 35 }, { stat: 'economicCapital', delta: 12 }, { stat: 'happiness', delta: 10 }],
+      hiddenEffects: [{ flag: 'parentLegislator' }] }] },
 ];
-function pickRandomLifeEvent(stage, player, rng, usedIds) {
-  const candidates = RANDOM_LIFE_EVENTS.filter((e) => e.stages.includes(stage) && !usedIds.has(e.id) && (!e.condition || e.condition(player)));
+function pickRandomLifeEvent(stage, player, rng, usedIds, severity) {
+  const candidates = RANDOM_LIFE_EVENTS.filter((e) => e.severity === severity && e.stages.includes(stage) && !usedIds.has(e.id) && (!e.condition || e.condition(player)));
   if (candidates.length === 0) return null;
   return rng.randomChoice(candidates);
 }
@@ -1164,7 +1193,7 @@ function createPlayer(rngSeed, isNPC, settings) {
     culturalCapital: family.culturalCapital, socialCapital: family.socialCapital, economicCapital: family.economicCapital,
     luck: clamp(rng.normal(50, 15), 0, 100), opportunity: clamp(rng.normal(50, 15), 0, 100), interpersonal: clamp(rng.normal(55, 15), 0, 100),
     successScore: 0, occupation: '學生', history: [], politicalCapital: family.politicalConnections, isNPC: !!isNPC,
-    hiddenOpportunities: [],
+    hiddenOpportunities: [], flags: {},
   };
 }
 /* 社會安全網 Social Safety Net —— 制度不一定能阻止壞事發生，但可以改變壞事造成的
@@ -1222,6 +1251,13 @@ function tradeoffMultiplier(strength0to100) {
    70–80 左右，努力的「累積感」與「稀缺感」才比較平衡，也讓散佈圖右側不再一次擠光。） */
 const EFFORT_DELTA_SCALE = 0.2;
 function applyEffect(player, effect, settings) {
+  /* 持久旗標 Flags —— 部分大事件（中樂透、父親當選立委……）除了改變分數，
+     也應該永久標記「這件事發生過」，讓後面的結構化事件可以用 choice.unlock
+     判斷是否要多開放一個選項（例如家裡全額資助出國）。effect.flag 不透過
+     0–100 的 delta／clamp 機制，只是單純在 player.flags 上蓋一個 true。 */
+  if (effect.flag) {
+    return { ...player, flags: { ...(player.flags || {}), [effect.flag]: true } };
+  }
   let delta = effect.stat === 'effort' ? effect.delta * EFFORT_DELTA_SCALE : effect.delta;
   if (effect.scaleBy) {
     const scaleStat = player[effect.scaleBy] != null ? player[effect.scaleBy] : 50;
@@ -1276,6 +1312,7 @@ function applyEffects(player, effects, settings) {
 }
 function getStatValue(player, statPath) {
   if (statPath.startsWith('family.')) return player.family[statPath.replace('family.', '')];
+  if (statPath.startsWith('flags.')) return !!(player.flags && player.flags[statPath.replace('flags.', '')]);
   return player[statPath];
 }
 /* 「機會集合 Opportunity Set」機制 —— condition.opportunityGated = true 的門檻，
@@ -1590,7 +1627,7 @@ function replaySession(seed, settings, pool, history) {
     /* 每個階段的兩個結構化事件跑完後，額外擲一次骰子決定要不要發生一件「隨機外生事件」——
        跟上面的事件不同，玩家看到的只有一個「知道了，繼續」按鈕，沒有選項可挑。 */
     if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_LIFE_EVENT_CHANCE)) {
-      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds);
+      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds, 'small');
       if (randomEvent) {
         usedEventIds.add(randomEvent.id);
         if (historyIndex < history.length) {
@@ -1601,6 +1638,22 @@ function replaySession(seed, settings, pool, history) {
           historyIndex += 1;
         } else {
           return { player, nextEvent: randomEvent, done: false };
+        }
+      }
+    }
+    /* 大事件的機率骰子跟小事件互相獨立，兩者都可能、也都可能都不發生在同一階段。 */
+    if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_BIG_LIFE_EVENT_CHANCE)) {
+      const bigEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds, 'big');
+      if (bigEvent) {
+        usedEventIds.add(bigEvent.id);
+        if (historyIndex < history.length) {
+          const record = history[historyIndex];
+          const choice = bigEvent.choices.find((c) => c.id === record.choiceId) || bigEvent.choices[0];
+          const result = applyChoice(player, bigEvent, choice, eventsRng, settings);
+          player = result.player;
+          historyIndex += 1;
+        } else {
+          return { player, nextEvent: bigEvent, done: false };
         }
       }
     }
@@ -1629,11 +1682,20 @@ function simulateFullLife(options) {
       player = result.player;
     }
     if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_LIFE_EVENT_CHANCE)) {
-      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds);
+      const randomEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds, 'small');
       if (randomEvent) {
         usedEventIds.add(randomEvent.id);
         const choice = randomEvent.choices[0];
         const result = applyChoice(player, randomEvent, choice, eventsRng, settings);
+        player = result.player;
+      }
+    }
+    if (settings.enableRandomLifeEvents !== false && eventsRng.probability(RANDOM_BIG_LIFE_EVENT_CHANCE)) {
+      const bigEvent = pickRandomLifeEvent(stage, player, eventsRng, usedEventIds, 'big');
+      if (bigEvent) {
+        usedEventIds.add(bigEvent.id);
+        const choice = bigEvent.choices[0];
+        const result = applyChoice(player, bigEvent, choice, eventsRng, settings);
         player = result.player;
       }
     }
@@ -1989,6 +2051,7 @@ function StatChip({ label, value, color }) {
 }
 function GameHeader({ player, playerName }) {
   const genderLabel = player.gender === 'male' ? '男性' : player.gender === 'female' ? '女性' : '其他';
+  const fam = player.family;
   return (
     <div className="panel p-3.5">
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -1998,6 +2061,12 @@ function GameHeader({ player, playerName }) {
         </div>
         <div className="text-[10px] text-inkFaint font-mono shrink-0">SEED {player.seed}</div>
       </div>
+      {fam && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-inkFaint mb-3 pb-2 border-b border-borderc/60">
+          <span className="truncate">父｜{educationLabel(fam.fatherEducation)}・{fam.fatherOccupation}</span>
+          <span className="truncate">母｜{educationLabel(fam.motherEducation)}・{fam.motherOccupation}</span>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2">
         <StatChip label="健康" value={player.health} color="#6fa87a" />
         <StatChip label="快樂" value={player.happiness} color="#d4a84c" />
@@ -2046,9 +2115,13 @@ function EventCard({ event, onChoose }) {
     return () => { clearInterval(tickId); clearTimeout(unlockId); };
   }, [event.id, pauseMs]);
   const isRandom = !!(event.tags && event.tags.includes('random'));
+  const isBigRandom = isRandom && event.severity === 'big';
   return (
     <div key={event.id} className={'panel p-6 fade-up' + (isRandom ? ' border-rust/50' : '')}>
-      <div className={'eyebrow mb-2' + (isRandom ? ' text-rust' : '')}>{isRandom ? '隨機事件 · 與你的選擇無關' : LIFE_STAGE_LABELS[event.stage] + ' 檔案'}</div>
+      <div className={'eyebrow mb-2 flex items-center gap-2' + (isRandom ? ' text-rust' : '')}>
+        <span>{isRandom ? '隨機事件 · 與你的選擇無關' : LIFE_STAGE_LABELS[event.stage] + ' 檔案'}</span>
+        {isBigRandom && <span className="px-1.5 py-0.5 rounded bg-rust/15 text-rust text-[10px] tracking-wide">重大事件</span>}
+      </div>
       <h2 className="font-display text-lg text-ink mb-2">{event.title}</h2>
       <p className="text-inkDim leading-relaxed mb-6 whitespace-pre-line">{event.description}</p>
       {locked ? (
